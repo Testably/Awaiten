@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Awaiten.Tests.ContainerSupport;
 
 namespace Awaiten.Tests;
@@ -94,10 +95,28 @@ public partial class FriendModuleTests
 			.Because("the container registers the scan match itself and calls its internal hook directly");
 	}
 
+	[Test]
+	public async Task AwaitsAnAsyncHookWithAnInternalDependency()
+	{
+		using CancellationTokenSource cancellation = new();
+		using FriendAsyncHookContainer.Root container = new();
+
+		IFriendAsyncTerminal terminal = await container.ResolveAsync<IFriendAsyncTerminal>(cancellation.Token);
+		IFriendAsyncPrinter printer = await container.ResolveAsync<IFriendAsyncPrinter>(cancellation.Token);
+
+		await That(terminal.Token).IsEqualTo(cancellation.Token)
+			.Because("the container awaits the module's internal Task hook directly and passes it the resolve-time token");
+		await That(printer.Token).IsEqualTo(cancellation.Token)
+			.Because("the container registers the scan match itself, awaits its internal ValueTask hook and passes it the token");
+	}
+
 	[Container]
 	[Import(typeof(SupportFriendModule))]
 	public static partial class FriendContainer;
 
+	[Container]
+	[Import(typeof(SupportFriendAsyncHookModule))]
+	public static partial class FriendAsyncHookContainer;
 	[Container]
 	[Import(typeof(SupportFriendHookModule))]
 	public static partial class FriendHookContainer;

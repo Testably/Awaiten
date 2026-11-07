@@ -214,4 +214,129 @@ public class AsyncActivationHookTests
 		await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
 			.Because("the consumer reads the asynchronous activation off the wrapper's Task return type, without any extra metadata");
 	}
+
+	/// <summary>
+	///     A module hook taking an internal dependency gets no wrapper when its assembly grants <c>InternalsVisibleTo</c>, so
+	///     a consumer granted access calls the hook directly and reads its asynchrony off the hook's own signature.
+	/// </summary>
+	public class WithoutAWrapper
+	{
+		private static string Library(string friend) => $$"""
+			using Awaiten;
+			using System.Threading;
+			using System.Threading.Tasks;
+
+			[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("{{friend}}")]
+
+			namespace Lib;
+
+			public interface ITerminal { }
+			public interface IPlugin { }
+			public interface IPrinter { }
+			internal sealed class Log { }
+			internal sealed class Terminal : ITerminal { }
+			internal sealed class Printer : IPlugin, IPrinter { }
+
+			[Module]
+			[Singleton<Log>]
+			[Singleton<Terminal, ITerminal>(OnActivated = nameof(Connect))]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Warm))]
+			public static partial class TerminalModule
+			{
+			    internal static Task Connect(Terminal terminal, CancellationToken cancellationToken, Log log) => Task.CompletedTask;
+
+			    internal static ValueTask Warm(Printer printer, Log log, CancellationToken cancellationToken) => default;
+			}
+			""";
+
+		[Test]
+		public async Task TheModuleBuildRecordsTheSkippedAsyncHooks()
+		{
+			GeneratorResult result = Generator.Run(Library("App"));
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an assembly granted InternalsVisibleTo calls an async hook directly just like a synchronous one");
+			string source = result.Sources.Values.Single();
+			await That(source).Contains("public const string Awaiten__HookSkipped_OnActivated_Terminal_")
+				.And.Contains("[global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IPrinter>(\"Lib.Printer\", Lifetime = global::Awaiten.Lifetime.Singleton, OnActivated = \"Warm\")]")
+				.And.DoesNotContain("Awaiten__Hook_OnActivated_Terminal_")
+				.And.DoesNotContain("Awaiten__ScanHook_");
+		}
+
+		[Test]
+		public async Task AnAsyncReleaseHookStaysAwt232()
+		{
+			GeneratorResult result = Generator.Run("""
+				using Awaiten;
+				using System.Threading.Tasks;
+
+				[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+				namespace Lib;
+
+				public interface ITerminal { }
+				internal sealed class Log { }
+				internal sealed class Terminal : ITerminal { }
+
+				[Module]
+				[Singleton<Log>]
+				[Singleton<Terminal, ITerminal>(OnRelease = nameof(Disconnect))]
+				public static partial class TerminalModule
+				{
+				    internal static Task Disconnect(Terminal terminal, Log log) => Task.CompletedTask;
+				}
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT232*Lib.Terminal*Disconnect*").AsWildcard()
+				.Because("no container could await the release hook, so skipping its wrapper for a friend would only defer the error");
+		}
+
+		[Test]
+		public async Task AFriendConsumerAwaitsEachHookWithItsToken()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("TestAssembly"), """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(TerminalModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("await global::Lib.TerminalModule.Connect(*, cancellationToken, *)").AsWildcard()
+				.Because("the consumer calls the registration's internal hook directly, awaits it and passes the resolve-time token");
+			await That(source).Contains("await global::Lib.TerminalModule.Warm(*, cancellationToken)").AsWildcard()
+				.Because("the consumer registers the skipped scan match itself and awaits its internal hook");
+		}
+
+		[Test]
+		public async Task AFriendConsumerTreatsEachHookedServiceAsAsync()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("TestAssembly"), """
+				using Awaiten;
+				using Lib;
+				using System;
+
+				namespace MyCode;
+
+				public sealed class TerminalConsumer { public TerminalConsumer(Func<ITerminal> terminal) { } }
+				public sealed class PrinterConsumer { public PrinterConsumer(Func<IPrinter> printer) { } }
+
+				[Container]
+				[Import(typeof(TerminalModule))]
+				[Singleton<TerminalConsumer>]
+				[Singleton<PrinterConsumer>]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT119*TerminalConsumer*").AsWildcard()
+				.Because("the hook the consumer calls directly returns a Task, so the registration's service is async-initialized");
+			await That(result.Diagnostics).Contains("*AWT119*PrinterConsumer*").AsWildcard()
+				.Because("the hook of the skipped scan match returns a ValueTask, so the match is async-initialized");
+		}
+	}
 }
