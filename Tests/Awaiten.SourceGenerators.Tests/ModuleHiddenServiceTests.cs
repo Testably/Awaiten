@@ -942,6 +942,32 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
+		public async Task CompositeOfAnInternalService_ReportsAwt230()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using System.Collections.Generic;
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal interface IBeanStore { }
+				internal sealed class BeanStore : IBeanStore { }
+				internal sealed class AllStores : IBeanStore { public AllStores(IEnumerable<IBeanStore> stores) { } }
+				internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore, IBeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				[Composite<AllStores, IBeanStore>]
+				public static partial class CoffeeModule { }
+				""", Container);
+
+			await That(result.Diagnostics).Contains("*AWT230*AllStores*").AsWildcard()
+				.Because("the module builds no composite into a handle, so a container in another assembly cannot construct it");
+		}
+
+		[Test]
 		public async Task OptionalAndDeferredProperties_AreResolvedThroughTheFactory()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""

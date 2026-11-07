@@ -82,9 +82,13 @@ partial class AwaitenGenerator
 			foreach (KeyValuePair<string, (string Service, string Module)> handle in handles.Where(handle => argument.Contains(handle.Key)))
 			{
 				string named = $"{handle.Value.Service} (internal to module {handle.Value.Module})";
-				argument = argument == handle.Key
-					? named
-					: argument.Replace($"'{handle.Key}'", $"'{named}'").Replace(handle.Key, handle.Value.Service);
+				foreach (string variant in new[] { ".BothDisposable", ".AsyncDisposable", ".Disposable", string.Empty, })
+				{
+					string type = handle.Key + variant;
+					argument = argument == type
+						? named
+						: argument.Replace($"'{type}'", $"'{named}'").Replace(type, handle.Value.Service);
+				}
 			}
 
 			return argument;
