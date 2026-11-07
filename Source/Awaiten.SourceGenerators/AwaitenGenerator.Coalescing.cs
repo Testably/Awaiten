@@ -85,6 +85,18 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			// The scanning module, or a module that builds the handle, may generate an alias under the match's service or,
+			// for a public implementation, under the implementation itself.
+			if (handles.Select(entry => entry.Origin).Prepend(match.Origin).OfType<INamedTypeSymbol>()
+				    .SelectMany(module => new[] { service, implementation, }.Select(aliased => (Module: module, Alias: GeneratedFactoryNamed(module, HiddenAliasName(implementation, aliased), compilation))))
+				    .FirstOrDefault(candidate => candidate.Alias is { Parameters.Length: 1, } generated
+				                                 && generated.Parameters[0].Type.ToDisplayString(FullyQualified) == handle.ServiceType
+				                                 && compilation.HasImplicitConversion(generated.ReturnType, service)) is ({ } owner, { } shared))
+			{
+				raw[index] = ThroughAlias(match with { Lifetime = handle.Lifetime, }, owner, implementation, shared);
+				continue;
+			}
+
 			string aliasMarker = AliasKeyMarker + implementation.ToDisplayString(FullyQualified);
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanMatchNotShared,

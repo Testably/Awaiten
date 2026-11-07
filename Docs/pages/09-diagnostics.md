@@ -2363,7 +2363,7 @@ public static partial class ApplianceModule;
 public static partial class CoffeeShop;
 ```
 
-The same applies when the other module builds the implementation through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), for example because it registers it under an internal service. The handle hides the instance, so the container can serve the match from it only when that module also registers the implementation under the match's interface or one that converts to it.
+When the other module builds the implementation through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), for example because it registers it under an internal service, the scanning module generates an alias that serves the match from the handle, so the container shares the handle's instance instead.
 
 **Fix:** Grant the container's assembly `InternalsVisibleTo` in the library, so the container constructs the implementation once for all of them. Or keep the scan from matching the implementation, or register it under a service that converts to the scan's interface.
 

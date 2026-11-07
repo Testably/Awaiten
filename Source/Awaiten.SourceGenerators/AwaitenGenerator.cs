@@ -217,6 +217,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			{
 				(List<RegistrationFactory> hiddenFactories, handles, aliases, initializers) = CompleteHiddenServices(hidden, compilation, diagnostics);
 				registrations.AddRange(hiddenFactories);
+				aliases.AddRange(ScanAliases(hidden, factories));
 			}
 
 			expanded = true;

@@ -216,7 +216,7 @@ public static partial class ApplianceModule;   // a container that imports both 
 
 The shared instance has the type the winning registration produces. Here that is `IBoiler`, the type the registration's factory returns, which doesn't convert to `IAppliance`. A container that can construct the implementation, because it is public or the library grants the container's assembly `InternalsVisibleTo`, then constructs it once for the registration and the match. Any other container reports [AWT240](../09-diagnostics.md#awt240) and drops the match, because the match's factory would build a second instance.
 
-When another module builds the implementation through a [generated handle](#services-only-the-module-uses), the handle hides the instance. A container in another assembly then serves the match from the handle when that module also registers the implementation under the match's interface or one that converts to it, and otherwise reports [AWT240](../09-diagnostics.md#awt240) and drops the match.
+When another module builds the implementation through a [generated handle](#services-only-the-module-uses), the handle hides the instance. The scanning module then generates an alias that serves the match from the handle, so a container in another assembly that imports both modules shares the handle's instance. A container that doesn't import the module with the handle builds the match through its own factory.
 
 ## One level deep
 

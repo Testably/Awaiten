@@ -1068,6 +1068,29 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The aliases of the matches of the module's scans whose implementation only other modules of the assembly
+	///     build through a handle: one per match, returning the instance from the implementation's instance handle as the
+	///     match's service, through which a consuming container serves the match from the handle instead of building a
+	///     second instance (see <c>ShareHandledInstances</c>), as a container in the module's own assembly shares one.
+	/// </summary>
+	private static IEnumerable<HiddenAlias> ScanAliases(HiddenServices hidden, List<ModuleFactory> scanFactories)
+	{
+		HashSet<string> names = new(StringComparer.Ordinal);
+		foreach (ModuleFactory factory in scanFactories.Where(factory => factory.Skip is null))
+		{
+			if (hidden.Assembly.HandledBy.Keys.FirstOrDefault(candidate => candidate.ToDisplayString(FullyQualified) == factory.ImplementationType) is not { } implementation
+			    || !hidden.HandledElsewhere(implementation)
+			    || hidden.Assembly.RegistrationsOf(hidden.Module).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, implementation))
+			    || !names.Add(HiddenAliasName(implementation, factory.ServiceType)))
+			{
+				continue;
+			}
+
+			yield return new HiddenAlias(HiddenAliasName(implementation, factory.ServiceType), factory.ServiceType, hidden.InstanceHandleType(implementation), "@awaiten__handle.Value");
+		}
+	}
+
+	/// <summary>
 	///     Mirrors a member that takes an internal service the module registers onto a generated member through the
 	///     service's handle: the parameter takes the handle in the same shape (see <see cref="HiddenShape" />) and the
 	///     generated member passes the instance on. Reports AWT237 for a shape it cannot pass on, and returns
@@ -1228,7 +1251,11 @@ partial class AwaitenGenerator
 
 	/// <summary>A deterministic name for the alias that serves <paramref name="service" /> from the handle of <paramref name="implementation" />.</summary>
 	private static string HiddenAliasName(INamedTypeSymbol implementation, INamedTypeSymbol service)
-		=> $"Alias_{implementation.Name}_{Fnv1a($"{implementation.ToDisplayString(FullyQualified)}\0{service.ToDisplayString(FullyQualified)}"):x8}";
+		=> HiddenAliasName(implementation, service.ToDisplayString(FullyQualified));
+
+	/// <inheritdoc cref="HiddenAliasName(INamedTypeSymbol, INamedTypeSymbol)" />
+	private static string HiddenAliasName(INamedTypeSymbol implementation, string service)
+		=> $"Alias_{implementation.Name}_{Fnv1a($"{implementation.ToDisplayString(FullyQualified)}\0{service}"):x8}";
 
 	/// <summary>A deterministic name for the wrapper of a hook that takes the handle of <paramref name="implementation" />.</summary>
 	private static string HiddenHookName(INamedTypeSymbol implementation, bool release, string hookName)

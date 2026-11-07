@@ -57,6 +57,26 @@ public partial class SharedScanHandleInstanceTests
 		await That(appliances.OfType<IHandleWarmable>().Single().Warmings).IsEqualTo(1);
 	}
 
+	[Test]
+	public async Task AScanMatchOfAnImplementationRegisteredOnlyUnderAnInternalService_SharesTheInstanceOfTheHandle()
+	{
+		using LampScanContainer.Root container = new();
+
+		IHandleLamp[] lamps = container.Resolve<IEnumerable<IHandleLamp>>().ToArray();
+		IHandleLampUser user = container.Resolve<IHandleLampUser>();
+
+		await That(lamps).HasCount(2);
+		await That(lamps).Contains(user.Bulb)
+			.Because("the scanning module serves the match of the internal bulb from the handle the other module builds it into");
+		await That(lamps).Contains(user.Torch)
+			.Because("the match of the public torch shares the handle's instance too, as in the modules' own assembly");
+	}
+
+	[Container]
+	[Import(typeof(HandleBulbModule))]
+	[Import(typeof(HandleLampScanModule))]
+	public static partial class LampScanContainer;
+
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Import(typeof(HandleKettleModule))]
 	[Import(typeof(HandleBoilerModule))]

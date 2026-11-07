@@ -65,6 +65,47 @@ internal sealed class HandleBoiler : IHandleAppliance, IHandleHeater;
 [Singleton<HandleBoiler, IHandleAppliance>(Fallback = Fallback.Silent)]
 public static partial class HandleBoilerModule;
 
+/// <summary>The marker <see cref="HandleLampScanModule" /> scans for.</summary>
+public interface IHandleLamp;
+
+/// <summary>A user of the internal bulb and the torch that their modules register under internal services.</summary>
+public interface IHandleLampUser
+{
+	/// <summary>The internal bulb the user received.</summary>
+	object Bulb { get; }
+
+	/// <summary>The torch the user received.</summary>
+	object Torch { get; }
+}
+
+internal interface IHandleBulbSource;
+
+internal interface IHandleTorchSource;
+
+internal sealed class HandleBulb : IHandleLamp, IHandleBulbSource;
+
+/// <summary>A public lamp that <see cref="HandleBulbModule" /> registers only under an internal service.</summary>
+public sealed class HandleTorch : IHandleLamp, IHandleTorchSource;
+
+internal sealed class HandleLampUser(IHandleBulbSource bulb, IHandleTorchSource torch) : IHandleLampUser
+{
+	public object Bulb => bulb;
+
+	public object Torch => torch;
+}
+
+/// <summary>A <c>[Module]</c> that registers an internal bulb and a public torch only under internal services.</summary>
+[Module]
+[Singleton<HandleBulb, IHandleBulbSource>]
+[Singleton<HandleTorch, IHandleTorchSource>]
+[Singleton<HandleLampUser, IHandleLampUser>]
+public static partial class HandleBulbModule;
+
+/// <summary>A <c>[Module]</c> whose scan matches the bulb and the torch that <see cref="HandleBulbModule" /> builds through handles.</summary>
+[Module]
+[Scan<IHandleLamp>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+public static partial class HandleLampScanModule;
+
 /// <summary>A <c>[Module]</c> whose scan matches the kettle and the boiler the other modules build through handles.</summary>
 [Module]
 [AsyncInitializer<IHandleWarmable>(nameof(IHandleWarmable.WarmAsync))]
