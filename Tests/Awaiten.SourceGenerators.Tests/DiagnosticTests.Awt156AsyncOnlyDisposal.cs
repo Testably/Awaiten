@@ -353,5 +353,64 @@ public partial class DiagnosticTests
 			await That(diagnostics.Any(d => d.Contains("AWT156"))).IsFalse()
 				.Because("a metadata container's graph cannot be rebuilt faithfully from the consuming compilation (its default [Scan] would sweep the wrong assembly), so it stays invisible to this check - a documented false negative with the runtime throw as the backstop");
 		}
+
+		public class WithAnAsynchronousReleaseHook
+		{
+			private static string Container(string registration) => $$"""
+			                                                          using Awaiten;
+			                                                          using System;
+			                                                          using System.Threading.Tasks;
+
+			                                                          namespace MyCode;
+
+			                                                          public sealed class Till { }
+
+			                                                          [Container]
+			                                                          [{{registration}}]
+			                                                          public static partial class MyContainer
+			                                                          {
+			                                                          	private static Task Close(Till till) => Task.CompletedTask;
+			                                                          }
+
+			                                                          public static class Consumer
+			                                                          {
+			                                                          	public static async Task Use()
+			                                                          	{
+			                                                          		using MyContainer.Root root = new();
+			                                                          		using MyContainer.Scope scope = root.CreateScope();
+			                                                          		await using MyContainer.Scope other = root.CreateScope();
+			                                                          	}
+			                                                          }
+
+			                                                          """;
+
+			[Test]
+			public async Task ReportsEverySynchronousDisposalThatCouldReachIt()
+			{
+				string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(Container("Scoped<Till>(OnRelease = nameof(Close))"));
+
+				await That(diagnostics.Count(d => d.Contains("AWT156"))).IsEqualTo(2)
+					.Because("a synchronous Dispose skips the asynchronous release hook and throws, on the Root and on a child Scope alike, while await using is the remedy");
+				await That(diagnostics).Contains("*AWT156*MyCode.Till*OnRelease hook is asynchronous*").AsWildcard();
+			}
+
+			[Test]
+			public async Task DoesNotReportAScopeDisposalForASingleton()
+			{
+				string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(Container("Singleton<Till>(OnRelease = nameof(Close))"));
+
+				await That(diagnostics.Count(d => d.Contains("AWT156"))).IsEqualTo(1)
+					.Because("a singleton's release is queued on the Root, so a child Scope's drain never reaches it");
+			}
+
+			[Test]
+			public async Task ReportsEvenWhenTheServiceSuppressesDisposal()
+			{
+				string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(Container("Scoped<Till>(OnRelease = nameof(Close), SuppressDisposal = true)"));
+
+				await That(diagnostics.Count(d => d.Contains("AWT156"))).IsEqualTo(2)
+					.Because("SuppressDisposal skips the instance's own disposal, but the release hook still runs");
+			}
+		}
 	}
 }

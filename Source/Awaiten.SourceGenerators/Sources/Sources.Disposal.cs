@@ -57,6 +57,28 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     Whether any instance registers an asynchronous <c>OnRelease</c> hook, so the <c>__releases</c> queue holds
+	///     <c>object</c> entries (an <c>Action</c> or a <c>Func&lt;Task&gt;</c>) instead of <c>Action</c>s, which keeps
+	///     the generated code of every other container unchanged.
+	/// </summary>
+	private static bool HasAsyncReleaseHooks(InstanceModel[] instances)
+	{
+		foreach (InstanceModel instance in instances)
+		{
+			if (instance.IsAsyncRelease)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>The element type of the <c>__releases</c> queue (see <see cref="HasAsyncReleaseHooks" />).</summary>
+	private static string ReleaseEntryType(bool asyncReleases)
+		=> asyncReleases ? "object" : "global::System.Action";
+
+	/// <summary>
 	///     Emits the <c>OnActivated</c> hook call for a freshly built instance (<c>OnActivated(variable, dep…);</c>).
 	///     The hook is a static container method reached by simple name from the nested <c>Root</c>/<c>Scope</c>,
 	///     exactly like a factory method. Any parameters after the instance are graph dependencies resolved inline
@@ -124,7 +146,7 @@ internal static partial class Sources
 		}
 
 		string arguments = EmitReleaseCaptures(builder, depth, instance, context, asynchronous);
-		EmitReleaseAdd(builder, depth, instance, variable, arguments);
+		EmitReleaseAdd(builder, depth, instance, variable, arguments, context.AsyncReleases);
 	}
 
 	/// <summary>
@@ -159,11 +181,25 @@ internal static partial class Sources
 	///     Emits the <c>__releases</c> enqueue of the release closure
 	///     (<c>Add(() =&gt; OnRelease(variable, dep…))</c>) over the by-value <paramref name="variable" /> and the
 	///     captured dependency <paramref name="arguments" /> (a comma-prefixed list, empty for an instance-only hook).
+	///     In a queue of <c>object</c> entries (<paramref name="asyncReleases" />) the closure is typed explicitly: an
+	///     <c>Action</c>, or a <c>Func&lt;Task&gt;</c> awaiting an asynchronous hook, whichever task type it returns.
 	/// </summary>
-	private static void EmitReleaseAdd(StringBuilder builder, int depth, InstanceModel instance, string variable, string arguments)
+	private static void EmitReleaseAdd(StringBuilder builder, int depth, InstanceModel instance, string variable, string arguments, bool asyncReleases)
 	{
-		Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
-			.Append(instance.OnRelease).Append('(').Append(variable).Append(arguments).AppendLine("));");
+		Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<").Append(ReleaseEntryType(asyncReleases)).Append(">()).Add(");
+		string call = $"{instance.OnRelease}({variable}{arguments})";
+		if (!asyncReleases)
+		{
+			builder.Append("() => ").Append(call).AppendLine(");");
+		}
+		else if (instance.IsAsyncRelease)
+		{
+			builder.Append("new global::System.Func<global::System.Threading.Tasks.Task>(async () => await ").Append(call).AppendLine(".ConfigureAwait(false)));");
+		}
+		else
+		{
+			builder.Append("new global::System.Action(() => ").Append(call).AppendLine("));");
+		}
 	}
 
 	/// <summary>
@@ -186,7 +222,7 @@ internal static partial class Sources
 
 		Indent(builder, depth).Append(type).Append(" __released = __s.").Append(field).AppendLine(";");
 		string arguments = EmitReleaseCaptures(builder, depth, instance, context, asynchronous);
-		EmitReleaseAdd(builder, depth, instance, "__released", arguments);
+		EmitReleaseAdd(builder, depth, instance, "__released", arguments, context.AsyncReleases);
 	}
 
 	/// <summary>
@@ -402,7 +438,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("if (!__s.__disposed)");
 		Indent(builder, depth + 1).AppendLine("{");
-		EmitReleaseAdd(builder, depth + 2, instance, "created", arguments);
+		EmitReleaseAdd(builder, depth + 2, instance, "created", arguments, context.AsyncReleases);
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
@@ -493,7 +529,7 @@ internal static partial class Sources
 		EmitFreshDisposalTracking(builder, depth, instance, asyncDisposal, asyncContext: true);
 	}
 
-	private static void EmitDispose(StringBuilder builder, int depth, bool asyncDisposal, bool hasReleases)
+	private static void EmitDispose(StringBuilder builder, int depth, bool asyncDisposal, bool hasReleases, bool asyncReleases)
 	{
 		AppendXmlSummary(builder, depth,
 			"Disposes every tracked instance in reverse creation order.");
@@ -502,7 +538,7 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
 		if (hasReleases)
 		{
-			Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Action>? __toRelease;");
+			Indent(builder, depth + 1).Append("global::System.Collections.Generic.List<").Append(ReleaseEntryType(asyncReleases)).AppendLine(">? __toRelease;");
 		}
 
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
@@ -529,7 +565,7 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Exception>? __failures = null;");
 		if (hasReleases)
 		{
-			EmitDrainReleases(builder, depth + 1);
+			EmitDrainReleases(builder, depth + 1, asyncReleases, asyncContext: false);
 		}
 
 		EmitDrainDisposables(builder, depth + 1, asyncDisposal);
@@ -541,16 +577,51 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the reverse-order drain of the (possibly null) captured <c>__toRelease</c> list: each queued
 	///     <c>OnRelease</c> action runs newest-first, before the instances are disposed. A throwing hook is
-	///     collected into <c>__failures</c> and neither skips the other hooks nor any disposal. Release actions
-	///     are synchronous, so the synchronous and asynchronous disposal paths drain them identically.
+	///     collected into <c>__failures</c> and neither skips the other hooks nor any disposal. In a queue that also
+	///     holds asynchronous releases (<paramref name="asyncReleases" />), <c>DisposeAsync</c>
+	///     (<paramref name="asyncContext" />) awaits each one in its place, while a synchronous <c>Dispose</c> cannot,
+	///     so it collects guidance to use <c>DisposeAsync</c> instead, like for an async-only disposable.
 	/// </summary>
-	private static void EmitDrainReleases(StringBuilder builder, int depth)
+	private static void EmitDrainReleases(StringBuilder builder, int depth, bool asyncReleases, bool asyncContext)
 	{
 		Indent(builder, depth).AppendLine("if (__toRelease is not null)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("for (int __index = __toRelease.Count - 1; __index >= 0; __index--)");
 		Indent(builder, depth + 1).AppendLine("{");
-		EmitCollectingTry(builder, depth + 2, "__toRelease[__index]();");
+		if (!asyncReleases)
+		{
+			EmitCollectingTry(builder, depth + 2, "__toRelease[__index]();");
+		}
+		else if (asyncContext)
+		{
+			Indent(builder, depth + 2).AppendLine("try");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("if (__toRelease[__index] is global::System.Action __release)");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).AppendLine("__release();");
+			Indent(builder, depth + 3).AppendLine("}");
+			Indent(builder, depth + 3).AppendLine("else");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).AppendLine("await ((global::System.Func<global::System.Threading.Tasks.Task>)__toRelease[__index])().ConfigureAwait(false);");
+			Indent(builder, depth + 3).AppendLine("}");
+			Indent(builder, depth + 2).AppendLine("}");
+			Indent(builder, depth + 2).AppendLine("catch (global::System.Exception __failure)");
+			Indent(builder, depth + 2).AppendLine("{");
+			EmitCollectFailure(builder, depth + 3, "__failure");
+			Indent(builder, depth + 2).AppendLine("}");
+		}
+		else
+		{
+			Indent(builder, depth + 2).AppendLine("if (__toRelease[__index] is global::System.Action __release)");
+			Indent(builder, depth + 2).AppendLine("{");
+			EmitCollectingTry(builder, depth + 3, "__release();");
+			Indent(builder, depth + 2).AppendLine("}");
+			Indent(builder, depth + 2).AppendLine("else");
+			Indent(builder, depth + 2).AppendLine("{");
+			EmitCollectFailure(builder, depth + 3, "new global::System.InvalidOperationException(\"Awaiten: an OnRelease hook is asynchronous (it returns Task or ValueTask); dispose this scope or container with DisposeAsync ('await using') instead of a synchronous Dispose().\")");
+			Indent(builder, depth + 2).AppendLine("}");
+		}
+
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
@@ -562,7 +633,7 @@ internal static partial class Sources
 	///     the lock, preferring <c>DisposeAsync</c> over <c>Dispose</c>. Emitted only when the compilation can see
 	///     <c>IAsyncDisposable</c>; the base <c>Scope</c> defines it and the <c>Root</c> inherits it.
 	/// </summary>
-	private static void EmitDisposeAsync(StringBuilder builder, int depth, bool hasReleases)
+	private static void EmitDisposeAsync(StringBuilder builder, int depth, bool hasReleases, bool asyncReleases)
 	{
 		AppendXmlSummary(builder, depth,
 			"Asynchronously disposes every tracked instance in reverse creation order.");
@@ -571,7 +642,7 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
 		if (hasReleases)
 		{
-			Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Action>? __toRelease;");
+			Indent(builder, depth + 1).Append("global::System.Collections.Generic.List<").Append(ReleaseEntryType(asyncReleases)).AppendLine(">? __toRelease;");
 		}
 
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
@@ -592,12 +663,12 @@ internal static partial class Sources
 
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		// Outside the lock so an awaited DisposeAsync (user code) never runs under it: run the synchronous
-		// release hooks (reverse creation order) first, then tear down.
+		// Outside the lock so an awaited DisposeAsync (user code) never runs under it: run the release hooks
+		// (reverse creation order) first, then tear down.
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Exception>? __failures = null;");
 		if (hasReleases)
 		{
-			EmitDrainReleases(builder, depth + 1);
+			EmitDrainReleases(builder, depth + 1, asyncReleases, asyncContext: true);
 		}
 
 		EmitDrainDisposablesAsync(builder, depth + 1);

@@ -41,7 +41,8 @@ public readonly struct Owned<T> : IAsyncDisposable, IDisposable
 	/// <summary>
 	///     Asynchronously disposes the scope backing this handle, awaiting the <c>DisposeAsync</c> of the instances
 	///     it owns and falling back to <see cref="IDisposable.Dispose" /> for the rest. Use this through
-	///     <c>await using</c> when <see cref="Value" /> (or anything built for it) is <see cref="IAsyncDisposable" />.
+	///     <c>await using</c> when <see cref="Value" /> (or anything built for it) is <see cref="IAsyncDisposable" /> or
+	///     has an asynchronous <c>OnRelease</c> hook.
 	///     A synchronous <see cref="Dispose" /> of such a handle throws. Disposing a <see langword="default" /> handle is a no-op.
 	/// </summary>
 	public ValueTask DisposeAsync()

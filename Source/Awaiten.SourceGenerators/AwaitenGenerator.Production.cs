@@ -147,7 +147,8 @@ partial class AwaitenGenerator
 			SuppressDisposal: info.SuppressDisposal,
 			PrivateServices: PrivateServices(info, containerSymbol),
 			ResolverType: resolverType,
-			IsAsyncActivation: activationHook is not null && IsAsyncHookReturn(activationHook.ReturnType, compilation));
+			IsAsyncActivation: activationHook is not null && IsAsyncHookReturn(activationHook.ReturnType, compilation),
+			IsAsyncRelease: releaseHook is not null && IsAsyncHookReturn(releaseHook.ReturnType, compilation));
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -625,7 +626,7 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation, …)</c>
-	///     (or, for an awaited activation hook, a <c>static Task</c>/<c>ValueTask</c> one; other awaitable returns are
+	///     (or, for an awaited hook, a <c>static Task</c>/<c>ValueTask</c> one; other awaitable returns are
 	///     <see cref="Diagnostics.UnsupportedAsyncLifecycleHook">AWT232</see>)
 	///     method on its owner - the container, or the module whose registration named the hook, kept per slot on
 	///     <c>ImplInfo</c> since two scan registrations with different origins can fill one implementation's two
@@ -822,8 +823,9 @@ partial class AwaitenGenerator
 	///     here and a <c>System.Type</c> so marked surfaces as an unregistered dependency (AWT101).
 	/// </summary>
 	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, bool release, BuildContext context)
-		// An awaited hook runs on the async path, so like an async factory it receives the resolve-time token.
-		=> ClassifyHookParameterSymbols(hook.Parameters.Skip(1), IsAsyncHookReturn(hook.ReturnType, context.Compilation), release, info, context);
+		// An awaited activation hook runs on the async path, so like an async factory it receives the resolve-time token.
+		// A release hook's dependencies are captured at construction on either path, awaited or not.
+		=> ClassifyHookParameterSymbols(hook.Parameters.Skip(1), !release && IsAsyncHookReturn(hook.ReturnType, context.Compilation), release, info, context);
 
 	/// <summary>
 	///     Classifies the graph-resolved <paramref name="hookParameters" /> of a lifecycle hook or an async initializer
@@ -891,7 +893,7 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Whether <paramref name="method" /> returns what a lifecycle hook may: <c>void</c>, or a <c>Task</c> or
-	///     <c>ValueTask</c> with or without a result. A result or an asynchronous release hook is still unusable, which
+	///     <c>ValueTask</c> with or without a result. A result is still unusable, which
 	///     <see cref="UnsupportedAsyncHook" /> reports precisely instead of falling through to AWT164.
 	/// </summary>
 	private static bool IsHookReturn(IMethodSymbol method, Compilation compilation)
@@ -910,8 +912,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Why the container cannot run <paramref name="hook" /> (<see cref="Diagnostics.UnsupportedAsyncLifecycleHook">AWT232</see>),
-	///     or <see langword="null" /> when it can: a hook's result has nowhere to go, and teardown does not await a
-	///     release hook.
+	///     or <see langword="null" /> when it can: a hook's result has nowhere to go, and an asynchronous release hook
+	///     has no token to receive, because <c>DisposeAsync</c> takes none.
 	/// </summary>
 	private static string? UnsupportedAsyncHook(IMethodSymbol hook, bool release, Compilation compilation)
 	{
@@ -920,8 +922,10 @@ partial class AwaitenGenerator
 			return $"it returns '{Display(hook.ReturnType.ToDisplayString(FullyQualified))}', but the container has no use for a hook's result; return Task or ValueTask instead";
 		}
 
-		return release && IsAsyncHookReturn(hook.ReturnType, compilation)
-			? "an OnRelease hook cannot be asynchronous, because teardown does not await it; return void instead"
+		return release
+		       && IsAsyncHookReturn(hook.ReturnType, compilation)
+		       && hook.Parameters.Any(parameter => parameter.Type.ToDisplayString(FullyQualified) == "global::System.Threading.CancellationToken")
+			? "an asynchronous OnRelease hook cannot take a CancellationToken, because DisposeAsync has none to pass; remove the parameter"
 			: null;
 	}
 

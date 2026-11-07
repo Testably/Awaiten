@@ -53,7 +53,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task ReportsAnAsynchronousReleaseHook()
+		public async Task ReportsAReleaseHookReturningTaskOfT()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -67,19 +67,46 @@ public partial class DiagnosticTests
 			                                       [Singleton<Terminal>(OnRelease = nameof(Disconnect))]
 			                                       public static partial class MyContainer
 			                                       {
-			                                       	private static Task Disconnect(Terminal terminal) => Task.CompletedTask;
+			                                       	private static Task<bool> Disconnect(Terminal terminal) => Task.FromResult(true);
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT232*Disconnect*OnRelease*").AsWildcard()
-				.Because("release hooks run synchronously during teardown, so a Task-returning one would never be awaited");
+			await That(result.Diagnostics).Contains("*AWT232*Disconnect*Task<bool>*").AsWildcard()
+				.Because("teardown awaits a release hook but has nowhere to put its result, like activation");
 		}
 
 		[Test]
-		public async Task ReportsAnAsynchronousReleaseHookOnAModuleScan()
+		public async Task ReportsAnAsynchronousReleaseHookTakingACancellationToken()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Terminal { }
+
+			                                       [Container]
+			                                       [Singleton<Terminal>(OnRelease = nameof(Disconnect))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static Task Disconnect(Terminal terminal, CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT232*Disconnect*CancellationToken*DisposeAsync*").AsWildcard()
+				.Because("DisposeAsync has no token to pass, and resolving one from the graph would pass a token that never cancels");
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
+				.Because("the hook is rejected before its parameters are resolved from the graph");
+		}
+
+		[Test]
+		public async Task ReportsAnAsynchronousReleaseHookTakingACancellationTokenOnAModuleScan()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Threading;
 			                                       using System.Threading.Tasks;
 
 			                                       namespace Lib;
@@ -92,12 +119,40 @@ public partial class DiagnosticTests
 			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnRelease = nameof(Stop))]
 			                                       public static partial class PluginModule
 			                                       {
-			                                       	internal static ValueTask Stop(Roaster roaster) => default;
+			                                       	internal static ValueTask Stop(Roaster roaster, CancellationToken cancellationToken) => default;
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT232*Stop*").AsWildcard()
-				.Because("the module validates its own hooks, and an asynchronous release hook is rejected there too");
+			await That(result.Diagnostics).Contains("*AWT232*Stop*CancellationToken*").AsWildcard()
+				.Because("the module validates its own hooks, and rejects a token on an asynchronous release hook there too");
+		}
+
+		[Test]
+		public async Task DoesNotReportForTaskAndValueTaskReleaseHooks()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Terminal { }
+			                                       public sealed class Printer { }
+			                                       public sealed class Settings { }
+
+			                                       [Container]
+			                                       [Singleton<Settings>]
+			                                       [Singleton<Terminal>(OnRelease = nameof(Disconnect))]
+			                                       [Scoped<Printer>(OnRelease = nameof(Cool))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static Task Disconnect(Terminal terminal, Settings settings) => Task.CompletedTask;
+			                                       	private static ValueTask Cool(Printer printer) => default;
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("DisposeAsync awaits Task and ValueTask release hooks");
 		}
 
 		[Test]

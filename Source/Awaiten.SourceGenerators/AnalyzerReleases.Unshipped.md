@@ -56,7 +56,7 @@
  AWT153  | Awaiten   | Error    | A module Factory/Instance member is not accessible from the generated container
  AWT154  | Awaiten   | Error    | An imported module declares a [Scan], or registers an implementation the container cannot construct, but its assembly carries no code generated for it, so it was built without the Awaiten generator (or a version predating self-compiled modules)
  AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations
- AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable
+ AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable, or one with an asynchronous OnRelease hook
  AWT157  | Awaiten   | Error    | An [Inject(Optional = true)] property is required and cannot be omitted from the object initializer
  AWT158  | Awaiten   | Warning  | An [Inject(Optional = true)] property is init-only, so an unregistered dependency leaves it permanently at its default
  AWT159  | Awaiten   | Error    | A keyed dictionary (IReadOnlyDictionary<TKey, TService>) has a key type that is neither string nor an enum, or that mismatches its keyed registrations
@@ -125,7 +125,7 @@
  AWT226  | Awaiten   | Error    | A type or member a container inherits through Extends is not accessible from it, or a private implementation of the base it cannot build through the base's generated factory
  AWT230  | Awaiten   | Error    | An imported module of another assembly declares a decorator, composite or open generic registration whose type the container cannot construct, which a module does not self-compile
  AWT231  | Awaiten   | Error    | An imported module of another assembly registers an implementation the container cannot construct, for which the module generated no factory or hook wrapper because it cannot support it
- AWT232  | Awaiten   | Error    | An OnActivated hook returns Task<T> or ValueTask<T>, or an OnRelease hook returns Task or ValueTask
+ AWT232  | Awaiten   | Error    | A lifecycle hook returns Task<T> or ValueTask<T>, or an asynchronous OnRelease hook takes a CancellationToken
  AWT233  | Awaiten   | Error    | An [AsyncInitializer<T>] names a method that is missing, overloaded, static, generic or inaccessible, does not return Task or ValueTask, or has a ref or Awaiten-attributed parameter
  AWT234  | Awaiten   | Error    | An [AsyncInitializer<T>] convention initializes an implementation, but its type or method is not accessible where the container calls it
 

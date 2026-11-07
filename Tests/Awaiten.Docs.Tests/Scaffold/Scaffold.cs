@@ -144,7 +144,11 @@ public sealed class CompositeReceiptChannel(IEnumerable<IReceiptChannel> channel
 public sealed class BackupReceiptChannel(IEnumerable<IReceiptChannel> channels) : IReceiptChannel;
 
 public interface IReceiptPrinter;
-public sealed class ReceiptPrinter : IReceiptPrinter;
+public sealed class ReceiptPrinter : IReceiptPrinter
+{
+	public Task PrintAsync(Order order) => Task.CompletedTask;
+}
+
 public sealed class ThermalPrinter : IReceiptPrinter;
 public sealed class WidePrinter : IReceiptPrinter;
 public sealed class DriveThroughRegister(IReceiptPrinter printer);

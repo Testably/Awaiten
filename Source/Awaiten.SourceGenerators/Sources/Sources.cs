@@ -76,6 +76,9 @@ internal static partial class Sources
 		ContainerModel? Model = null)
 	{
 		public bool Imports => Model is { Imports: true, };
+
+		/// <summary>Whether a release hook is asynchronous, so the release queue holds <c>object</c> entries.</summary>
+		public bool AsyncReleases { get; } = HasAsyncReleaseHooks(Instances);
 	}
 
 	/// <summary>
@@ -217,7 +220,7 @@ internal static partial class Sources
 		// only when some registration names an OnRelease hook, so containers without one carry no extra field.
 		if (HasReleaseHooks(instances))
 		{
-			Indent(fields, body).AppendLine("protected global::System.Collections.Generic.List<global::System.Action>? __releases;");
+			Indent(fields, body).Append("protected global::System.Collections.Generic.List<").Append(ReleaseEntryType(context.AsyncReleases)).AppendLine(">? __releases;");
 		}
 
 		if (NeedsWiringSupport(instances))
@@ -296,11 +299,11 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
 		Separate(members);
 		bool hasReleases = HasReleaseHooks(instances);
-		EmitDispose(members, body, asyncDisposal, hasReleases);
+		EmitDispose(members, body, asyncDisposal, hasReleases, context.AsyncReleases);
 		if (asyncDisposal)
 		{
 			Separate(members);
-			EmitDisposeAsync(members, body, hasReleases);
+			EmitDisposeAsync(members, body, hasReleases, context.AsyncReleases);
 		}
 
 		// Typed-resolver region: the explicit IAwaitenResolver<T>.Resolve() and IAwaitenAsyncResolver<T>.ResolveAsync() fast
