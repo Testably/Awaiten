@@ -352,7 +352,7 @@ partial class AwaitenGenerator
 			}
 
 			string name = ContributionFactoryName(attributeClass.Name, type, service);
-			if (hidden is not null && attributeClass.Name == "DecorateAttribute" && hidden.Services.ContainsKey(service))
+			if (hidden is not null && attributeClass.Name == "DecorateAttribute" && (hidden.Services.ContainsKey(service) || hidden.ProvidedElsewhere(service)))
 			{
 				if (factories.All(factory => factory.FactoryName != name) && HiddenDecoratorFactory(type, service, name, context) is { } decorator)
 				{

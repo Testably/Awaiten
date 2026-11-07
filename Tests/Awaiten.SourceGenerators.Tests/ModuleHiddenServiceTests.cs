@@ -980,6 +980,48 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
+		public async Task DecoratorOfAnInternalServiceAnotherModuleRegisters_DecoratesItsHandle()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal interface IBeanStore { }
+				internal sealed class BeanStore : IBeanStore { }
+				internal sealed class LoggingStore : IBeanStore, System.IDisposable { public LoggingStore(IBeanStore inner) { } public void Dispose() { } }
+				internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore, IBeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+
+				[Module]
+				[Decorate<LoggingStore, IBeanStore>]
+				public static partial class LoggingModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				[Import(typeof(LoggingModule))]
+				public static partial class MyContainer;
+				""");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			string logging = $"Decorator_LoggingStore_{Fnv1a("global::Lib.LoggingStore\0global::Lib.IBeanStore"):x8}";
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a container in the modules' own assembly decorates the service another module registers");
+			await That(source).Contains($"global::Lib.LoggingModule.Internals.{logging}(")
+				.Because("the decorating module builds its decorator into the handle the registering module declares");
+		}
+
+		[Test]
 		public async Task CompositeOfAnInternalService_ReportsAwt230()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""

@@ -901,7 +901,8 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The factory of a decorator the module declares over an internal service it registers, or
+	///     The factory of a decorator the module declares over an internal service it registers, or that another module
+	///     of its assembly provides (see <see cref="HiddenServices.ProvidedElsewhere" />), or
 	///     <see langword="null" /> when it cannot be built, so a consuming container reports the decorator as before
 	///     (AWT230). It mirrors the constructor like any decorator factory, so the inner parameter takes the service's
 	///     handle, and wraps the decorator in a handle of the same service, in the variant that matches its disposal.

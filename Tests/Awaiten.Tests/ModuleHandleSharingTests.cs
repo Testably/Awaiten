@@ -48,7 +48,27 @@ public class ModuleHandleSharingTests
 		await That(container.Resolve<IProvidedChef>().Store.GetType().Name).IsEqualTo("ProvidedStore")
 			.Because("the module first by name declares the handle, but the module that can build the store serves it");
 	}
+
+	[Test]
+	public async Task DecoratorOfAnInternalServiceAnotherModuleRegisters_DecoratesIt()
+	{
+		IDecoratedTillUser user;
+		using (DecoratedTillContainer.Root container = new())
+		{
+			user = container.Resolve<IDecoratedTillUser>();
+			await That(user.Till.GetType().Name).IsEqualTo("LoggingTill")
+				.Because("the decorating module builds its decorator into the handle the registering module declares");
+		}
+
+		await That(user.DecoratorDisposed).IsTrue()
+			.Because("the container disposes the decorator link through the handle variant of its disposal");
+	}
 }
+
+[Container]
+[Import(typeof(CrossAssemblyTillModule))]
+[Import(typeof(CrossAssemblyTillLoggingModule))]
+public static partial class DecoratedTillContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyProvidedBModule))]

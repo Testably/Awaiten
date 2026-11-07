@@ -80,3 +80,44 @@ public static partial class CrossAssemblyProvidedBModule;
 [Module]
 [Singleton<ProvidedChef, IProvidedChef>]
 public static partial class CrossAssemblyProvidedCModule;
+
+/// <summary>A user of an internal till that one module registers and another module decorates.</summary>
+public interface IDecoratedTillUser
+{
+	/// <summary>The internal till the user received.</summary>
+	object Till { get; }
+
+	/// <summary>Whether the decorator around the till was disposed.</summary>
+	bool DecoratorDisposed { get; }
+}
+
+internal interface IDecoratedTill;
+
+internal sealed class DecoratedTill : IDecoratedTill;
+
+internal sealed class LoggingTill(IDecoratedTill inner) : IDecoratedTill, System.IDisposable
+{
+	public IDecoratedTill Inner => inner;
+
+	public bool Disposed { get; private set; }
+
+	public void Dispose() => Disposed = true;
+}
+
+internal sealed class DecoratedTillUser(IDecoratedTill till) : IDecoratedTillUser
+{
+	public object Till => till;
+
+	public bool DecoratorDisposed => till is LoggingTill { Disposed: true, };
+}
+
+/// <summary>A <c>[Module]</c> that registers the internal till and its user.</summary>
+[Module]
+[Singleton<DecoratedTill, IDecoratedTill>]
+[Singleton<DecoratedTillUser, IDecoratedTillUser>]
+public static partial class CrossAssemblyTillModule;
+
+/// <summary>A <c>[Module]</c> that decorates the internal till the other module registers.</summary>
+[Module]
+[Decorate<LoggingTill, IDecoratedTill>]
+public static partial class CrossAssemblyTillLoggingModule;
