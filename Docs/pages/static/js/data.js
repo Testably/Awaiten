@@ -1338,6 +1338,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 16:20:18 2026 \u002B0100",
         "message": "fix: keep same-named types of different assemblies apart when coalescing registrations (#304)"
+      },
+      {
+        "sha": "a36536144640380f1f4a5e1d8a63230f32515394",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
+        "message": "docs: add a start page and move the documentation under /docs (#305)"
       }
     ],
     "labels": [
@@ -1563,7 +1569,8 @@ window.BENCHMARK_DATA = {
       "b72a771b",
       "ccf58c56",
       "2a2d7fcf",
-      "2b142d5c"
+      "2b142d5c",
+      "a3653614"
     ],
     "datasets": [
       {
@@ -1792,7 +1799,8 @@ window.BENCHMARK_DATA = {
           7.769299439512766,
           7.152551202901772,
           6.22518953787429,
-          5.990023606098616
+          5.990023606098616,
+          5.6568721224864325
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1804,6 +1812,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2263,7 +2272,8 @@ window.BENCHMARK_DATA = {
           7.910061454772949,
           7.686421884940221,
           6.607575004654271,
-          8.048060488487993
+          8.048060488487993,
+          5.304618752002716
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2275,6 +2285,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2734,7 +2745,8 @@ window.BENCHMARK_DATA = {
           105.63815778891245,
           136.54314168294272,
           80.97903691927591,
-          85.84115645090739
+          85.84115645090739,
+          91.2033970441137
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2746,6 +2758,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -3201,7 +3214,8 @@ window.BENCHMARK_DATA = {
           9.092276326247624,
           8.46698340658958,
           7.370255270351966,
-          7.127158185201032
+          7.127158185201032,
+          7.721382867296537
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3213,6 +3227,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3664,7 +3679,8 @@ window.BENCHMARK_DATA = {
           11.253129681715599,
           10.814559342769476,
           8.588356546064217,
-          9.987180081861359
+          9.987180081861359,
+          10.4060402320964
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3676,6 +3692,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5246,6 +5263,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 16:20:18 2026 \u002B0100",
         "message": "fix: keep same-named types of different assemblies apart when coalescing registrations (#304)"
+      },
+      {
+        "sha": "a36536144640380f1f4a5e1d8a63230f32515394",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
+        "message": "docs: add a start page and move the documentation under /docs (#305)"
       }
     ],
     "labels": [
@@ -5471,7 +5494,8 @@ window.BENCHMARK_DATA = {
       "b72a771b",
       "ccf58c56",
       "2a2d7fcf",
-      "2b142d5c"
+      "2b142d5c",
+      "a3653614"
     ],
     "datasets": [
       {
@@ -5700,7 +5724,8 @@ window.BENCHMARK_DATA = {
           8.392847761511803,
           8.1625124546034,
           6.307027402733054,
-          6.276053121456733
+          6.276053121456733,
+          6.767882611070361
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5712,6 +5737,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6171,7 +6197,8 @@ window.BENCHMARK_DATA = {
           8.041267940402031,
           8.013456351558368,
           6.5010578873065805,
-          6.473943101508277
+          6.473943101508277,
+          5.5266898820797605
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -6183,6 +6210,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6642,7 +6670,8 @@ window.BENCHMARK_DATA = {
           105.64103939533234,
           141.78986191749573,
           80.69127450670514,
-          86.28255980014801
+          86.28255980014801,
+          96.9563953450748
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6654,6 +6683,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -7109,7 +7139,8 @@ window.BENCHMARK_DATA = {
           9.00738419707005,
           9.337876484862395,
           7.1331194788217545,
-          7.1081315040588375
+          7.1081315040588375,
+          8.095845530430475
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -7121,6 +7152,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7572,7 +7604,8 @@ window.BENCHMARK_DATA = {
           15.234788406353731,
           14.069668560073925,
           11.427632818264621,
-          11.369449884692829
+          11.369449884692829,
+          10.922918966412544
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7584,6 +7617,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -9154,6 +9188,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 16:20:18 2026 \u002B0100",
         "message": "fix: keep same-named types of different assemblies apart when coalescing registrations (#304)"
+      },
+      {
+        "sha": "a36536144640380f1f4a5e1d8a63230f32515394",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
+        "message": "docs: add a start page and move the documentation under /docs (#305)"
       }
     ],
     "labels": [
@@ -9379,7 +9419,8 @@ window.BENCHMARK_DATA = {
       "b72a771b",
       "ccf58c56",
       "2a2d7fcf",
-      "2b142d5c"
+      "2b142d5c",
+      "a3653614"
     ],
     "datasets": [
       {
@@ -9608,7 +9649,8 @@ window.BENCHMARK_DATA = {
           21.227729033146584,
           15.677066132426262,
           16.406379848718643,
-          23.68210225701332
+          23.68210225701332,
+          16.236739282097137
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9770,6 +9812,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -10079,7 +10122,8 @@ window.BENCHMARK_DATA = {
           1553.07155418396,
           1308.6835789998372,
           1286.1200045176915,
-          1666.2849545796712
+          1666.2849545796712,
+          1200.0716029575892
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -10091,6 +10135,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -10550,7 +10595,8 @@ window.BENCHMARK_DATA = {
           30112.814331054688,
           26508.70210484096,
           26349.615421840124,
-          31544.145802815754
+          31544.145802815754,
+          26396.858467610677
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10784,7 +10830,8 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32478,
-          32482
+          32482,
+          32478
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -11017,7 +11064,8 @@ window.BENCHMARK_DATA = {
           741.4411521911621,
           588.7318829854329,
           622.9590184529623,
-          775.5524712880452
+          775.5524712880452,
+          589.8228967984518
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -11047,6 +11095,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -11480,7 +11529,8 @@ window.BENCHMARK_DATA = {
           11797.213197980609,
           9932.408028157552,
           9703.552462259928,
-          13089.775373331706
+          13089.775373331706,
+          9373.086362398588
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11710,7 +11760,8 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24760,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13062,6 +13113,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 16:20:18 2026 \u002B0100",
         "message": "fix: keep same-named types of different assemblies apart when coalescing registrations (#304)"
+      },
+      {
+        "sha": "a36536144640380f1f4a5e1d8a63230f32515394",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
+        "message": "docs: add a start page and move the documentation under /docs (#305)"
       }
     ],
     "labels": [
@@ -13287,7 +13344,8 @@ window.BENCHMARK_DATA = {
       "b72a771b",
       "ccf58c56",
       "2a2d7fcf",
-      "2b142d5c"
+      "2b142d5c",
+      "a3653614"
     ],
     "datasets": [
       {
@@ -13516,7 +13574,8 @@ window.BENCHMARK_DATA = {
           175.46990512212116,
           117.44301011562348,
           119.22174943288168,
-          177.0146333694458
+          177.0146333694458,
+          116.15712831815084
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -13678,6 +13737,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -13987,7 +14047,8 @@ window.BENCHMARK_DATA = {
           14685.844338553292,
           11012.183235168457,
           12003.559396362305,
-          15366.220078531902
+          15366.220078531902,
+          11098.153425089518
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -13999,6 +14060,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -14458,7 +14520,8 @@ window.BENCHMARK_DATA = {
           734732.7408854166,
           642654.7808919271,
           646329.7504185268,
-          769742.7905273438
+          769742.7905273438,
+          657602.3051757812
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14692,7 +14755,8 @@ window.BENCHMARK_DATA = {
           737001,
           719096,
           721169,
-          741735
+          741735,
+          741801
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14925,7 +14989,8 @@ window.BENCHMARK_DATA = {
           46605.90701904297,
           36076.742358398435,
           36986.69571940104,
-          45223.80165921725
+          45223.80165921725,
+          37129.964998372394
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15155,7 +15220,8 @@ window.BENCHMARK_DATA = {
           81573,
           80351,
           80971,
-          80307
+          80307,
+          80313
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15388,7 +15454,8 @@ window.BENCHMARK_DATA = {
           349788.8990760216,
           271205.96350097656,
           305479.79811197915,
-          396440.4999674479
+          396440.4999674479,
+          281903.87361653644
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15618,7 +15685,8 @@ window.BENCHMARK_DATA = {
           573125,
           573044,
           573075,
-          573119
+          573119,
+          573110
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16946,6 +17014,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 16:20:18 2026 \u002B0100",
         "message": "fix: keep same-named types of different assemblies apart when coalescing registrations (#304)"
+      },
+      {
+        "sha": "a36536144640380f1f4a5e1d8a63230f32515394",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
+        "message": "docs: add a start page and move the documentation under /docs (#305)"
       }
     ],
     "labels": [
@@ -17167,7 +17241,8 @@ window.BENCHMARK_DATA = {
       "b72a771b",
       "ccf58c56",
       "2a2d7fcf",
-      "2b142d5c"
+      "2b142d5c",
+      "a3653614"
     ],
     "datasets": [
       {
@@ -17392,7 +17467,8 @@ window.BENCHMARK_DATA = {
           261.3460292816162,
           297.06142603556316,
           166.57418851852418,
-          207.37625492413838
+          207.37625492413838,
+          220.58188829421997
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -17427,6 +17503,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -17855,7 +17932,8 @@ window.BENCHMARK_DATA = {
           591.3138009707133,
           658.1334022680918,
           403.36327799161273,
-          472.92447985921586
+          472.92447985921586,
+          483.41390975316364
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -17867,6 +17945,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -18318,7 +18397,8 @@ window.BENCHMARK_DATA = {
           6533.916272090031,
           5197.812123616536,
           3638.01783396403,
-          5099.211953989665
+          5099.211953989665,
+          5082.806159337361
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -18402,6 +18482,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -18781,7 +18862,8 @@ window.BENCHMARK_DATA = {
           384.371622244517,
           426.95728039741516,
           248.0403185571943,
-          362.7832593282064
+          362.7832593282064,
+          361.03914145060946
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -18793,6 +18875,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -19244,7 +19327,8 @@ window.BENCHMARK_DATA = {
           723.7660251617432,
           732.3823932647705,
           394.29474479811535,
-          585.9068884849548
+          585.9068884849548,
+          561.3177251815796
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -19256,6 +19340,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
