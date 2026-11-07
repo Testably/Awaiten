@@ -1018,7 +1018,7 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			mirrored.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
+			mirrored.Add(MirrorParameter(parameter));
 		}
 
 		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());

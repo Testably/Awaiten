@@ -235,13 +235,20 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth, summary);
 
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
-		string signature = string.Join(", ", parameters.Select(parameter => $"{parameter.Type} @{parameter.Name}"));
-		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
+		string[] members = factory.Members.AsArray();
+		string signature = string.Join(", ", parameters.Select(MirroredParameter));
+		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length).Select(parameter => $"@{parameter.Name}"));
 
 		Indent(builder, depth)
 			.Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
 			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
-			.Append('(').Append(arguments).AppendLine(");");
+			.Append('(').Append(arguments).Append(')');
+		if (members.Length > 0)
+		{
+			builder.Append(" { ").Append(string.Join(", ", members.Select(member => $"{member} = @{member}"))).Append(" }");
+		}
+
+		builder.AppendLine(";");
 	}
 
 	/// <summary>
@@ -256,6 +263,10 @@ internal static partial class Sources
 			.Append(SymbolDisplay.FormatLiteral(reason, quote: true)).AppendLine(";");
 	}
 
+	/// <summary>A mirrored parameter as it is declared on a generated factory or wrapper, with its attributes.</summary>
+	private static string MirroredParameter(FactoryParameter parameter)
+		=> $"{parameter.Attributes}{parameter.Type} @{parameter.Name}";
+
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)
 	{
 		AppendXmlSummary(builder, depth,
@@ -265,7 +276,7 @@ internal static partial class Sources
 		// Parameter names are emitted verbatim-prefixed: a scanned constructor may legally name a parameter with a
 		// reserved keyword ('@event'), whose symbol name carries no '@', and the prefix is harmless otherwise.
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
-		string signature = string.Join(", ", parameters.Select(parameter => $"{parameter.Type} @{parameter.Name}"));
+		string signature = string.Join(", ", parameters.Select(MirroredParameter));
 		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
 
 		Indent(builder, depth)
@@ -295,7 +306,7 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth, summary);
 
 		FactoryParameter[] parameters = hook.Parameters.AsArray();
-		string signature = string.Concat(parameters.Select(parameter => $", {parameter.Type} @{parameter.Name}"));
+		string signature = string.Concat(parameters.Select(parameter => $", {MirroredParameter(parameter)}"));
 		string arguments = string.Concat(parameters.Select(parameter => $", @{parameter.Name}"));
 
 		// The synthetic instance parameter starts from an awaiten__ prefix so it is very unlikely to collide with a

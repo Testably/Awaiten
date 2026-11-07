@@ -132,7 +132,11 @@ partial class AwaitenGenerator
 
 	/// <summary>The parameters of a constructor or hook, mirrored onto a generated factory or wrapper.</summary>
 	private static EquatableArray<FactoryParameter> MirroredParameters(IEnumerable<IParameterSymbol> parameters)
-		=> new(parameters.Select(parameter => new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name)).ToArray());
+		=> new(parameters.Select(MirrorParameter).ToArray());
+
+	/// <summary>One constructor parameter mirrored onto a generated factory.</summary>
+	private static FactoryParameter MirrorParameter(IParameterSymbol parameter)
+		=> new(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name);
 
 	/// <summary>
 	///     A registration a container in the owner's own assembly builds through the factory the owner (a module or a
