@@ -66,7 +66,7 @@ partial class AwaitenGenerator
 			}
 
 			if (raw.FirstOrDefault(alias => alias.ServiceSymbol is { } aliased
-			                                && alias.ImplementationType == alias.ServiceType + AliasKeyMarker + implementation.ToDisplayString(FullyQualified)
+			                                && alias.ImplementationType == TypeIdentity(aliased, compilation) + AliasKeyMarker + TypeIdentity(implementation, compilation)
 			                                && compilation.HasImplicitConversion(aliased, service)) is { } alias)
 			{
 				raw[index] = match with
@@ -93,11 +93,11 @@ partial class AwaitenGenerator
 				                                 && generated.Parameters[0].Type.ToDisplayString(FullyQualified) == handle.ServiceType
 				                                 && compilation.HasImplicitConversion(generated.ReturnType, service)) is ({ } owner, { } shared))
 			{
-				raw[index] = ThroughAlias(match with { Lifetime = handle.Lifetime, }, owner, implementation, shared);
+				raw[index] = ThroughAlias(match with { Lifetime = handle.Lifetime, }, owner, implementation, shared, compilation);
 				continue;
 			}
 
-			string aliasMarker = AliasKeyMarker + implementation.ToDisplayString(FullyQualified);
+			string aliasMarker = AliasKeyMarker + TypeIdentity(implementation, compilation);
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanMatchNotShared,
 				LocationInfo.From(match.Location),

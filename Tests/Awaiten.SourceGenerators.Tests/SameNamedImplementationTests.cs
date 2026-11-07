@@ -89,6 +89,25 @@ public class SameNamedImplementationTests
 	}
 
 	[Test]
+	public async Task BuiltThroughHandlesByModulesOfTwoAssemblies_StayTwoInstances()
+	{
+		static string Handled(string name) => $$"""
+			[Module]
+			[Singleton<Shared.Clock, I{{name}}Clock>]
+			[Singleton<Shared.Clock>]
+			public static partial class ClockModule { }
+			""";
+
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssemblies(
+			Library("First", Handled("First")), Library("Second", Handled("Second")), Consumer);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("each library builds its own clock into an instance handle of its own, so the handles never meet");
+		await That(result.Sources[Container]).Contains("global::First.ClockModule.Internals.HiddenRegistration_Clock_").Exactly(1)
+			.And.Contains("global::Second.ClockModule.Internals.HiddenRegistration_Clock_").Exactly(1);
+	}
+
+	[Test]
 	public async Task RegisteredByOneModuleAndScannedByTheOther_StayTwoInstances()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssemblies(
