@@ -116,5 +116,94 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT196*").AsWildcard();
 			await That(result.Diagnostics).DoesNotContain("*AWT197*").AsWildcard();
 		}
+
+		[Test]
+		public async Task Awt195_NamesAParameterTypeNestedPrivatelyInTheModule()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IGreeter { }
+			                                       public interface IFormatter { }
+
+			                                       [Module]
+			                                       [Singleton<Formatter, IFormatter>]
+			                                       [Singleton<Greeter, IGreeter>]
+			                                       public static partial class GreeterModule
+			                                       {
+			                                           private sealed class Formatter : IFormatter { }
+
+			                                           private sealed class Greeter : IGreeter
+			                                           {
+			                                               public Greeter(Formatter formatter) { }
+			                                           }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT195*'Lib.GreeterModule.Greeter' is self-compiled from a module registration, but its constructor parameter 'formatter' needs 'Lib.GreeterModule.Formatter', which is private to the module or a class containing it, so no container can register or resolve it; depend on an accessible service that 'Lib.GreeterModule.Formatter' implements instead*").AsWildcard()
+				.Because("only the private type itself could satisfy the parameter, and no container can register a service it cannot name");
+			await That(result.Diagnostics).DoesNotContain("*not accessible outside the module's assembly*").AsWildcard()
+				.Because("widening the parameter's accessibility is not the remedy for a type that has to stay private");
+		}
+
+		[Test]
+		public async Task Awt195_NamesAParameterTypeNestedPrivatelyInTheModuleForAScanMatch()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System.Collections.Generic;
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+			                                       public static partial class PluginModule
+			                                       {
+			                                           private sealed class Part { }
+
+			                                           private sealed class FakePlugin : IPlugin
+			                                           {
+			                                               public FakePlugin(IEnumerable<Part> parts) { }
+			                                           }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT195*'Lib.PluginModule.FakePlugin' matched the module scan, but its constructor parameter 'parts' needs 'Lib.PluginModule.Part', which is private to the module or a class containing it*").AsWildcard()
+				.Because("a private type argument hides the parameter from every container just as the private type itself does");
+		}
+
+		[Test]
+		public async Task Awt195_NamesAParameterTypePrivateToAClassContainingTheModuleForAScanMatch()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private sealed class Part { }
+
+			                                           private sealed class FakePlugin : IPlugin
+			                                           {
+			                                               public FakePlugin(Part part) { }
+			                                           }
+
+			                                           [Module]
+			                                           [Scan<IPlugin>(As = ScanAs.Marker)]
+			                                           public static partial class PluginModule { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT195*'Lib.Fakes.FakePlugin' matched the module scan, but its constructor parameter 'part' needs 'Lib.Fakes.Part', which is private to the module or a class containing it*").AsWildcard()
+				.Because("a type private to a class containing the module is just as unregistrable as one nested in the module, so widening it is not the remedy");
+			await That(result.Diagnostics).DoesNotContain("*not accessible outside the module's assembly*").AsWildcard();
+		}
 	}
 }

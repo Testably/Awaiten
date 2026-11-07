@@ -477,8 +477,58 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Shop.FakeClock'*registered as the private service 'MyCode.Shop.FakeClock'*register it under an accessible service*").AsWildcard()
+			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Shop.FakeClock' cannot be registered: 'MyCode.Shop.FakeClock' is private or protected and it is registered as itself; register it under an accessible service*").AsWildcard()
 				.Because("a resolver returning the private service itself would expose it");
+			await That(result.Diagnostics).DoesNotContain("*private service*").AsWildcard()
+				.Because("calling the implementation its own private service names it twice and reads as if it were a second type");
+		}
+
+		[Test]
+		public async Task PrivateImplementationUnderAnotherPrivateService_NamesTheService()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       [Container]
+			                                       [Singleton<FakeClock, IFakeClock>]
+			                                       public static partial class Shop
+			                                       {
+			                                           private interface IFakeClock { }
+
+			                                           private sealed class FakeClock : IFakeClock { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Shop.FakeClock' is private or protected and it is registered as the private service 'MyCode.Shop.IFakeClock'*").AsWildcard();
+		}
+
+		[Test]
+		public async Task ModuleRegistrationFactory_DescribesWhoCannotConstructTheImplementation()
+		{
+			(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) = Generator.RunGenerator("""
+			                                                                                  using Awaiten;
+
+			                                                                                  namespace MyCode;
+
+			                                                                                  public interface IClock { }
+
+			                                                                                  [Module]
+			                                                                                  [Singleton<FakeClock, IClock>]
+			                                                                                  public static partial class ClockModule
+			                                                                                  {
+			                                                                                      private sealed class FakeClock : IClock { }
+			                                                                                  }
+			                                                                                  """, [], []);
+			string module = run.Results
+				.SelectMany(r => r.GeneratedSources)
+				.Single(s => s.HintName.Contains("ModuleScan"))
+				.SourceText.ToString();
+
+			await That(module).Contains("constructs an implementation a consuming container cannot construct")
+				.Because("no container constructs a type nested privately in the module, not even one in the module's own assembly");
+			await That(module).DoesNotContain("another assembly");
 		}
 
 		[Test]
@@ -1060,7 +1110,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task PrivateNestedTypeOfModuleThatAlsoScans_DoesNotReport()
+		public async Task PrivateNestedTypeOfModuleThatAlsoScans_YieldsTheScanMatchToTheRegistration()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -1086,8 +1136,10 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).IsEmpty()
-				.Because("the scan skips the private type, so the registration's factory is the only one");
+			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("warning AWT193")
+			                                                                  && diagnostic.Contains("'MyCode.ShopModule.FakeClock' is private or protected and the module registers it explicitly"))
+				.Because("a scan never turns its former silent skip of a private type into the AWT197 error, so the match yields to the registration's factory");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("Awaiten__Registration_FakeClock_");
 		}
 
 		[Test]

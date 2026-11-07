@@ -37,6 +37,10 @@ public sealed partial class PrivateNestedImplementationTests
 
 	public interface IGreeter;
 
+	public interface IPlugin;
+
+	public interface IEnclosedPlugin;
+
 	public sealed class Tracker
 	{
 		public List<string> Events { get; } = new();
@@ -574,6 +578,67 @@ public sealed partial class PrivateNestedImplementationTests
 		}
 	}
 
+	public sealed class Scans
+	{
+		[Test]
+		public async Task ContainerScan_RegistersItsPrivateMatchesUnderTheMarker()
+		{
+			Tracker tracker;
+			using (ScanShop.Root shop = new())
+			{
+				tracker = shop.Resolve<Tracker>();
+				IEnumerable<IPlugin> plugins = shop.Resolve<IEnumerable<IPlugin>>();
+
+				await That(plugins.Select(NameOf)).IsEqualTo(["FirstPlugin", "SecondPlugin",]);
+				await That(tracker.Events).IsEqualTo(["activated FirstPlugin", "activated SecondPlugin",])
+					.Because("the container's private hook takes the private match itself");
+			}
+
+			await That(tracker.Events).Contains("SecondPlugin disposed")
+				.Because("the container disposes the private match as its own type");
+		}
+
+		[Test]
+		public async Task ModuleScan_BuildsItsPrivateMatchesThroughTheGeneratedFactory()
+		{
+			Tracker tracker;
+			using (ModuleScanShop.Root shop = new())
+			{
+				tracker = shop.Resolve<Tracker>();
+				IEnumerable<IPlugin> plugins = shop.Resolve<IEnumerable<IPlugin>>();
+
+				await That(plugins.Select(NameOf)).IsEqualTo(["ModulePlugin",]);
+				await That(shop.Resolve<IPlugin>()).IsSameAs(plugins.Single())
+					.Because("the scan's singleton lifetime holds for the instance the factory returns");
+				await That(tracker.Events).IsEqualTo(["activated ModulePlugin",])
+					.Because("the container runs the module's private hook through the generated wrapper");
+			}
+
+			await That(tracker.Events).IsEqualTo(["activated ModulePlugin", "ModulePlugin disposed",])
+				.Because("the disposable trait is read from the private match, not from the marker the factory returns");
+		}
+
+		[Test]
+		public async Task ModuleScan_BuildsAMatchPrivateToAClassContainingTheModule()
+		{
+			Tracker tracker;
+			using (EnclosedScanShop.Root shop = new())
+			{
+				tracker = shop.Resolve<Tracker>();
+				IEnclosedPlugin plugin = shop.Resolve<IEnclosedPlugin>();
+
+				await That(NameOf(plugin)).IsEqualTo("EnclosedPlugin");
+				await That(shop.Resolve<IEnumerable<IEnclosedPlugin>>()).IsEqualTo([plugin,])
+					.Because("the scan registers the match once, as a singleton under its marker");
+				await That(tracker.Events).IsEqualTo(["activated EnclosedPlugin",])
+					.Because("the container runs the module's private hook through the generated wrapper");
+			}
+
+			await That(tracker.Events).IsEqualTo(["activated EnclosedPlugin", "EnclosedPlugin disposed",])
+				.Because("the container disposes the match the module's factory built for it");
+		}
+	}
+
 	[Container]
 	[Singleton<Tracker>]
 	[Singleton<FakeClock, IClock>]
@@ -926,4 +991,56 @@ public sealed partial class PrivateNestedImplementationTests
 	[Import(typeof(GreeterFakes.Deep.DeepGreeterModule))]
 	[Singleton<Tracker>]
 	public static partial class DeeplyEnclosedModuleShop;
+
+	[Container]
+	[Singleton<Tracker>]
+	[Scan<IPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamePatterns = new[] { "!ModulePlugin", }, OnActivated = nameof(Activate))]
+	public static partial class ScanShop
+	{
+		private static void Activate(IPlugin plugin, Tracker tracker) => tracker.Events.Add($"activated {plugin.GetType().Name}");
+
+		private sealed class FirstPlugin : IPlugin;
+
+		private sealed class SecondPlugin(Tracker tracker) : IPlugin, IDisposable
+		{
+			public void Dispose() => tracker.Events.Add("SecondPlugin disposed");
+		}
+	}
+
+	[Module]
+	[Scan<IPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate))]
+	public static partial class ModulePluginModule
+	{
+		private static void Activate(ModulePlugin plugin, Tracker tracker) => tracker.Events.Add($"activated {plugin.GetType().Name}");
+
+		private sealed class ModulePlugin(Tracker tracker) : IPlugin, IDisposable
+		{
+			public void Dispose() => tracker.Events.Add("ModulePlugin disposed");
+		}
+	}
+
+	[Container]
+	[Import(typeof(ModulePluginModule))]
+	[Singleton<Tracker>]
+	public static partial class ModuleScanShop;
+
+	public static partial class PluginFakes
+	{
+		private sealed class EnclosedPlugin(Tracker tracker) : IEnclosedPlugin, IDisposable
+		{
+			public void Dispose() => tracker.Events.Add("EnclosedPlugin disposed");
+		}
+
+		[Module]
+		[Scan<IEnclosedPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate))]
+		public static partial class EnclosedPluginModule
+		{
+			private static void Activate(EnclosedPlugin plugin, Tracker tracker) => tracker.Events.Add($"activated {plugin.GetType().Name}");
+		}
+	}
+
+	[Container]
+	[Import(typeof(PluginFakes.EnclosedPluginModule))]
+	[Singleton<Tracker>]
+	public static partial class EnclosedScanShop;
 }
