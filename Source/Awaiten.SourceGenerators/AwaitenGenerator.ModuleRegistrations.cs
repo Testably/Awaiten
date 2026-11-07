@@ -446,8 +446,8 @@ partial class AwaitenGenerator
 	///     the module a consumer cannot call (AWT234), and an inaccessible implementation under several services no
 	///     accessible type covers, or also matched by one of the module's scans (AWT197), since two factories would split
 	///     the shared instance. When the module's assembly grants <c>InternalsVisibleTo</c> to any assembly, an
-	///     implementation that fails only with AWT195, AWT197, AWT200 or AWT234
-	///     gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
+	///     implementation that fails only with AWT195, AWT197, AWT200 or AWT234, or that one of the module's scans also
+	///     matches, gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
 	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it. A hook
 	///     whose wrapper fails only with AWT203 or AWT204 is skipped the same way: the factory stays, and the hook lands
@@ -526,11 +526,17 @@ partial class AwaitenGenerator
 		string returnName = (returnType ?? first.Service).ToDisplayString(FullyQualified);
 
 		// A scan factory builds the type for every consumer, so one constructing the registration itself would still split it.
+		// A scan that skipped the type leaves it to the assemblies granted InternalsVisibleTo, so the registration does too.
 		bool scannedToo = false;
-		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName && factory.Skip is null) is { } scanned)
+		bool scanSkipped = false;
+		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName) is { } scanned)
 		{
-			ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, rejections);
-			scannedToo = true;
+			scanSkipped = scanned.Skip is not null;
+			if (!scanSkipped)
+			{
+				ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, rejections);
+				scannedToo = true;
+			}
 		}
 
 		if (ModuleAsyncInitializerFault(implementation, context, subject, first.Location) is { } initializerFault)
@@ -556,6 +562,12 @@ partial class AwaitenGenerator
 				context.Diagnostics.AddRange(rejections);
 			}
 
+			return null;
+		}
+
+		if (scanSkipped)
+		{
+			skipped.Add(new SkippedRegistration(RegistrationSkippedName(implementation), "it is also matched by the module's [Scan]"));
 			return null;
 		}
 

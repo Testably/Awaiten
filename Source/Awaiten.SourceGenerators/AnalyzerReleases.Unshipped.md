@@ -54,7 +54,7 @@
  AWT151  | Awaiten   | Warning  | An imported module declares no registrations
  AWT152  | Awaiten   | Error    | An imported [Module] class is not declared static
  AWT153  | Awaiten   | Error    | A module Factory/Instance member is not accessible from the generated container
- AWT154  | Awaiten   | Error    | An imported module declares a [Scan], or registers an implementation the container cannot construct, but its assembly carries no code generated for it, so it was built without the Awaiten generator (or a version predating self-compiled modules)
+ AWT154  | Awaiten   | Error    | An imported module declares a [Scan], or registers an implementation the container cannot construct, but its assembly carries no code generated for it, so it was built without the Awaiten generator (or a version predating self-compiled modules), or carries a generated scan registration another version of the generator wrote
  AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations
  AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable, or one with an asynchronous OnRelease hook
  AWT157  | Awaiten   | Error    | An [Inject(Optional = true)] property is required and cannot be omitted from the object initializer

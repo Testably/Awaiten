@@ -473,6 +473,26 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Reports AWT154 once per record for a <c>[GeneratedScanRegistration]</c> of <paramref name="module" /> that
+	///     this container cannot read, because another version of the generator wrote it.
+	/// </summary>
+	private static void ReportUnreadableScanRecord(LifetimeCollectionContext context, INamedTypeSymbol module, ITypeSymbol? service, string? factory, Location? location)
+	{
+		DiagnosticInfo diagnostic = new(
+			Diagnostics.ModuleScanRecordUnreadable,
+			LocationInfo.From(location),
+			new EquatableArray<string>([
+				Display(module.ToDisplayString(FullyQualified)),
+				Display(service?.ToDisplayString(FullyQualified) ?? "?"),
+				factory ?? "null",
+			]));
+		if (!context.Diagnostics.Contains(diagnostic))
+		{
+			context.Diagnostics.Add(diagnostic);
+		}
+	}
+
+	/// <summary>
 	///     A registration of <paramref name="owner" /> rewritten to call the wrappers the owner generates for its
 	///     <c>Factory</c> or <c>Instance</c> member and its lifecycle hooks (see <see cref="CollectModuleMemberWrappers" />
 	///     and <see cref="RecordBaseWrappers" />), for each member this compilation cannot reach while it can reach the
@@ -627,7 +647,9 @@ partial class AwaitenGenerator
 	///     when <paramref name="skip" /> suppressed the collection for a same-compilation module whose <c>[Scan]</c>
 	///     the container expands directly (see <see cref="Collect" />). An attribute that names a match the module
 	///     generated no factory for (see <see cref="SkippedScanMatch" />) registers the match itself when this container
-	///     can construct it, exactly as a scan would, and is otherwise dropped after reporting AWT231 once per match.
+	///     can construct it, exactly as a scan would, and is otherwise dropped after reporting AWT231 once per match. An
+	///     attribute of an imported module that is malformed, or that names neither a generated member nor a skipped
+	///     match, was written by another version of the generator and is dropped after reporting AWT154.
 	/// </summary>
 	private static bool CollectGeneratedScanRegistration(
 		AttributeData attribute,
@@ -643,12 +665,22 @@ partial class AwaitenGenerator
 			return false;
 		}
 
-		if (skip
-		    || attributeClass.TypeArguments.Length != 1
+		if (skip)
+		{
+			return true;
+		}
+
+		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+		if (attributeClass.TypeArguments.Length != 1
 		    || attributeClass.TypeArguments[0] is not INamedTypeSymbol service
 		    || attribute.ConstructorArguments.Length != 1
 		    || attribute.ConstructorArguments[0].Value is not string factory)
 		{
+			if (origin is not null)
+			{
+				ReportUnreadableScanRecord(context, origin, attributeClass.TypeArguments.FirstOrDefault(), null, location);
+			}
+
 			return true;
 		}
 
@@ -692,7 +724,6 @@ partial class AwaitenGenerator
 			NamedFlag(attribute, "AsyncDisposable"));
 
 		string serviceType = service.ToDisplayString(FullyQualified);
-		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 		if (origin is not null && SkippedScanMatch(origin, factory) is var (implementation, reason))
 		{
 			if (context.Inherited || CanConstruct(implementation, context.Compilation))
@@ -716,6 +747,12 @@ partial class AwaitenGenerator
 				ReportNotSelfCompiled(context, origin, implementation, "factory", reason, $"change the module so its [Scan] can generate a factory for '{Display(implementation.ToDisplayString(FullyQualified))}'");
 			}
 
+			return true;
+		}
+
+		if (origin is not null && MembersNamed(origin, factory).IsEmpty)
+		{
+			ReportUnreadableScanRecord(context, origin, service, factory, location);
 			return true;
 		}
 

@@ -799,6 +799,19 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     The form of <see cref="ModuleScanNotExpanded">AWT154</see> for a <c>[GeneratedScanRegistration]</c> whose
+	///     factory names neither a member of the module's generated code nor a match it recorded as skipped. Another
+	///     version of the generator wrote the record, so the container cannot read it and drops the match.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanRecordUnreadable = new(
+		"AWT154",
+		ModuleScanNotExpanded.Title,
+		"The imported module '{0}' carries a generated scan registration of '{1}' whose factory '{2}' names no factory or skipped match in its generated code; its assembly was compiled with another version of the Awaiten source generator, so the container cannot use the match; rebuild the module's assembly with the version of the generator this container uses",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     Two different imported modules register the same service key with different implementations at
 	///     the same precedence tier (both strongly, or both through open generic templates expanded to the
 	///     same closed service), so which one wins single resolution is decided only by [Import] order,

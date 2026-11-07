@@ -209,7 +209,9 @@ partial class AwaitenGenerator
 	///     in the module (see <see cref="IsHiddenInModule" />) that the module also registers yields to that registration with AWT193. A
 	///     convention of the module that initializes the match but that a consumer cannot call is AWT234. A match
 	///     that fails only with AWT195, AWT197, AWT200 or AWT234 while an assembly granted <c>InternalsVisibleTo</c> could
-	///     construct it (see <see cref="FriendsCanConstruct" />) is recorded instead, with no factory and no error.
+	///     construct it (see <see cref="FriendsCanConstruct" />) is recorded instead, with no factory and no error. So is
+	///     a match the module also registers when an assembly granted <c>InternalsVisibleTo</c>, or any assembly, can
+	///     construct it, since a factory would split the instance a container shares with the registration.
 	///     Returns the number of factories contributed (0 or 1).
 	/// </summary>
 	private static int RegisterModuleScanMatch(
@@ -233,7 +235,8 @@ partial class AwaitenGenerator
 			return 0;
 		}
 
-		bool skippable = FriendsCanConstruct(type, context);
+		bool registered = ModuleRegisters(type, context);
+		bool skippable = FriendsCanConstruct(type, context) || (registered && ConstructibleEverywhere(type));
 		if (distinct.Count > 1 && !skippable)
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -249,8 +252,7 @@ partial class AwaitenGenerator
 
 		// A private match the module also registers would be AWT197, which an internal match is too, but a scan used
 		// to skip private types silently, so it yields to the registration with a warning instead of failing.
-		if (IsHiddenInModule(type, context.Module, context.Compilation)
-		    &&ConstructedModuleRegistrations(context.Module, context.Compilation).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, type)))
+		if (registered && IsHiddenInModule(type, context.Module, context.Compilation))
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanTypePrivate,
@@ -296,6 +298,12 @@ partial class AwaitenGenerator
 			}
 		}
 
+		if (skipReason is null && registered && skippable)
+		{
+			skipReason = RegisteredTooReason;
+			parameters = default;
+		}
+
 		// The scan's hooks, resolved and (for a generic hook) closed in the module's own build. Each becomes a
 		// public wrapper the module emits beside the factory, so a cross-assembly consumer runs it without naming the
 		// module's (possibly internal) hook; the closed marker forms let a same-compilation container bind that hook
@@ -338,6 +346,21 @@ partial class AwaitenGenerator
 	private static bool FriendsCanConstruct(INamedTypeSymbol type, ModuleScanContext context)
 		=> GrantsInternalsVisibleTo(context.Compilation.Assembly)
 		   && TypeHiddenInModule(type, context.Module, context.Compilation) is null;
+
+	/// <summary>Whether the module registers <paramref name="type" /> through its constructor as well.</summary>
+	private static bool ModuleRegisters(INamedTypeSymbol type, ModuleScanContext context)
+		=> ConstructedModuleRegistrations(context.Module, context.Compilation)
+			.Any(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, type));
+
+	/// <summary>Whether a container in any assembly can construct <paramref name="type" /> itself.</summary>
+	private static bool ConstructibleEverywhere(INamedTypeSymbol type)
+		=> IsExternallyAccessible(type) && type.InstanceConstructors.Any(constructor => constructor.DeclaredAccessibility == Accessibility.Public);
+
+	/// <summary>
+	///     Why the module generates no factory for a match it also registers: a container constructs the type for the
+	///     registration, and a factory would build a second instance of what it shares as one.
+	/// </summary>
+	private const string RegisteredTooReason = "it is also registered explicitly by the module";
 
 	/// <summary>The services a module-scan match is exposed under, and whether a factory it cannot have may be skipped.</summary>
 	private readonly record struct ScanExposure(string TypeName, List<INamedTypeSymbol> Services, bool Skippable);
