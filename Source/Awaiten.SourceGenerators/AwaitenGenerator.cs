@@ -124,7 +124,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation, diagnostics, skipped) : new();
 		HiddenServices? hidden = receives ? CollectHiddenServices(moduleSymbol, compilation) : null;
 		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation, hidden) : new();
-		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0)
+		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0
+		    && hidden is not { SeveralModules: true, Services.Count: > 0, })
 		{
 			return diagnostics.Count == 0
 				? null

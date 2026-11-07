@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
@@ -28,19 +29,25 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void NameHiddenServices(INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
+		List<ImportedModule> imported = CollectImportedModules(container, new List<DiagnosticInfo>());
+		if (ReadExtends(container) is { } baseContainer)
+		{
+			imported.AddRange(CollectImportedModules(baseContainer, new List<DiagnosticInfo>()));
+		}
+
+		List<INamedTypeSymbol> modules = imported
+			.Select(module => module.Symbol)
+			.Where(module => !SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly))
+			.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+			.ToList();
+		List<INamedTypeSymbol> providers = ReportMissingHandleProviders(imported, modules, compilation, diagnostics);
 		if (diagnostics.Count == 0)
 		{
 			return;
 		}
 
-		IEnumerable<INamedTypeSymbol> modules = CollectImportedModules(container, new List<DiagnosticInfo>()).Select(module => module.Symbol);
-		if (ReadExtends(container) is { } baseContainer)
-		{
-			modules = modules.Concat(CollectImportedModules(baseContainer, new List<DiagnosticInfo>()).Select(module => module.Symbol));
-		}
-
 		Dictionary<string, (string Service, string Module)> handles = new(StringComparer.Ordinal);
-		foreach (INamedTypeSymbol module in modules.Where(module => !SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)))
+		foreach (INamedTypeSymbol module in modules.Concat(providers))
 		{
 			string moduleName = Display(module.ToDisplayString(FullyQualified));
 			foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation, members: true))
@@ -80,6 +87,70 @@ partial class AwaitenGenerator
 
 			return argument;
 		}
+	}
+
+	/// <summary>
+	///     Reports AWT238 at the <c>[Import]</c> of a module of another assembly whose generated members take the handle
+	///     of an internal service that another module of that assembly declares, when the imported module does not
+	///     register the service itself and the container does not import that other module, and drops the AWT101 the
+	///     missing handle registration causes, since the import is the one fix.
+	///     Returns the modules that declare a handle an imported module takes, which name those handles in diagnostics.
+	/// </summary>
+	private static List<INamedTypeSymbol> ReportMissingHandleProviders(List<ImportedModule> imported, List<INamedTypeSymbol> modules, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		List<INamedTypeSymbol> providers = new();
+		foreach (ImportedModule import in imported.Where(import => modules.Contains(import.Symbol, SymbolEqualityComparer.Default)))
+		{
+			INamedTypeSymbol module = import.Symbol;
+			IEnumerable<ITypeSymbol> types = (module.GetTypeMembers(InternalsClass).FirstOrDefault()?.GetMembers() ?? ImmutableArray<ISymbol>.Empty)
+				.OfType<IMethodSymbol>()
+				.SelectMany(method => method.Parameters.Select(parameter => parameter.Type).Concat([method.ReturnType,]));
+			foreach (INamedTypeSymbol handle in types.SelectMany(TypesIn).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default))
+			{
+				if (handle is not { ContainingType: { Name: InternalsClass, ContainingType: { } provider, }, }
+				    || !handle.Name.StartsWith("Hidden_", StringComparison.Ordinal)
+				    || SymbolEqualityComparer.Default.Equals(provider, module))
+				{
+					continue;
+				}
+
+				if (!providers.Contains(provider, SymbolEqualityComparer.Default))
+				{
+					providers.Add(provider);
+				}
+
+				if (modules.Contains(provider, SymbolEqualityComparer.Default)
+				    || ConstructedModuleRegistrations(module, compilation, members: true).Any(registration => HiddenHandleName(registration.Service) == handle.Name))
+				{
+					continue;
+				}
+
+				string missing = Display(handle.ToDisplayString(FullyQualified));
+				diagnostics.RemoveAll(diagnostic => diagnostic.Descriptor == Diagnostics.MissingDependency
+				                                    && diagnostic.MessageArgs.AsArray().Any(argument => argument.StartsWith(missing, StringComparison.Ordinal)));
+				string service = ConstructedModuleRegistrations(provider, compilation, members: true)
+					.Select(registration => registration.Service)
+					.FirstOrDefault(candidate => HiddenHandleName(candidate) == handle.Name)?.ToDisplayString(FullyQualified) ?? handle.ToDisplayString(FullyQualified);
+				DiagnosticInfo diagnostic = new(
+					Diagnostics.ModuleHandleProviderNotImported,
+					LocationInfo.From(import.ImportLocation),
+					new EquatableArray<string>([Display(module.ToDisplayString(FullyQualified)), Display(service), Display(provider.ToDisplayString(FullyQualified)),]));
+				if (!diagnostics.Contains(diagnostic))
+				{
+					diagnostics.Add(diagnostic);
+				}
+			}
+		}
+
+		return providers;
+
+		static IEnumerable<INamedTypeSymbol> TypesIn(ITypeSymbol type)
+			=> type switch
+			{
+				IArrayTypeSymbol array => TypesIn(array.ElementType),
+				INamedTypeSymbol named => new[] { named, }.Concat(named.TypeArguments.SelectMany(TypesIn)),
+				_ => [],
+			};
 	}
 
 	/// <summary>
@@ -129,6 +200,25 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		// Another module that declares the handle and registers the implementation the same way builds the one shared
+		// instance, so both registrations coalesce into one, as they do in a container of the modules' own assembly.
+		INamedTypeSymbol builder = module;
+		List<ModuleRegistration> built = registrations;
+		string factoryName = factory.Name;
+		if (handle.ContainingType?.ContainingType is { } declaring
+		    && !SymbolEqualityComparer.Default.Equals(declaring, module)
+		    && HiddenProducer(declaring, HiddenFactoryName(implementation), compilation) is { Handle: { } shared, } declared
+		    && SymbolEqualityComparer.Default.Equals(shared, handle)
+		    && HandledTogether(ConstructedModuleRegistrations(declaring, compilation, members: true)
+			    .Where(candidate => SymbolEqualityComparer.Default.Equals(candidate.Implementation, implementation))) is { Count: > 0, } declaredRegistrations
+		    && declaredRegistrations[0].Production == registrations[0].Production
+		    && declaredRegistrations[0].Member == registrations[0].Member)
+		{
+			builder = declaring;
+			built = declaredRegistrations;
+			factoryName = declared.Name;
+		}
+
 		List<RawRegistration> handled = new();
 		if (Alias(service) is not { ReturnType: INamedTypeSymbol aliasType, } alias)
 		{
@@ -166,30 +256,31 @@ partial class AwaitenGenerator
 		RawRegistration HandleRegistration(string? key)
 			=> registration with
 			{
-				ImplementationType = $"{registration.ImplementationType}{HiddenKeyMarker}{module.ToDisplayString(FullyQualified)}",
+				ImplementationType = $"{registration.ImplementationType}{HiddenKeyMarker}{(handle.ContainingType?.ContainingType ?? module).ToDisplayString(FullyQualified)}",
 				ServiceType = handle.ToDisplayString(FullyQualified),
 				ServiceSymbol = handle,
 				Implementation = handle,
+				Origin = builder,
 				Production = registration.Production == ProductionKind.Instance ? ProductionKind.Instance : ProductionKind.Factory,
-				ProductionMember = InInternals(factory.Name),
+				ProductionMember = InInternals(factoryName),
 				Key = key,
-				Eager = registrations.Any(candidate => NamedFlag(candidate.Attribute, "Eager")),
+				Eager = registrations.Concat(built).Any(candidate => NamedFlag(candidate.Attribute, "Eager")),
 				OnActivated = Hook(release: false),
 				OnRelease = Hook(release: true),
-				SuppressDisposal = NamedFlag(registrations[0].Attribute, "SuppressDisposal"),
+				SuppressDisposal = NamedFlag(built[0].Attribute, "SuppressDisposal"),
 				// A factory member may return any subtype, which the handle's variant reveals only at run time.
-				Traits = registration.Production == ProductionKind.Constructor ? TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)) : null,
+				Traits = registration.Production == ProductionKind.Constructor ? TraitsOf(implementation, DeclaredAsyncInitializers(builder, compilation, null)) : null,
 				TraitsExact = registration.Production == ProductionKind.Constructor,
 				Unlisted = true,
 				Hidden = implementation,
 			};
 
 		string? Hook(bool release)
-			=> registrations
+			=> built
 				.Select(candidate => NamedArgument(candidate.Attribute, release ? "OnRelease" : "OnActivated"))
 				.Where(hook => hook is not null)
 				.Select(hook => HiddenHookName(implementation, release, hook!))
-				.Where(wrapper => !InternalsMembers(module, wrapper).IsEmpty)
+				.Where(wrapper => !InternalsMembers(builder, wrapper).IsEmpty)
 				.Select(InInternals)
 				.FirstOrDefault();
 	}

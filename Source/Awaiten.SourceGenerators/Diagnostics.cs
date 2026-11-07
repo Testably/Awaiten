@@ -2026,8 +2026,9 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     In a module's own build, a generated factory needs an internal service that the module does not register but
-	///     another module of the same assembly does. A container in another assembly reaches an internal service only
-	///     through the handle of the module that registers it, and a handle serves that module alone.
+	///     another module of the same assembly does, and that module cannot share its handle: it cannot receive generated
+	///     members, cannot build the service on its own, or the member is a scan match, which the other module does not
+	///     account for.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleHiddenServiceInOtherModule = new(
 		"AWT236",
@@ -2045,6 +2046,19 @@ internal static class Diagnostics
 		"AWT237",
 		"Internal service in an unsupported shape",
 		"{0}, but {1} takes the internal service '{2}' as '{3}', which the generated factory cannot pass on to a container in another assembly; take '{2}' directly, or as Func<T>, Lazy<T>, Owned<T>, Func<Owned<T>> or a collection of T",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A container imports a module of another assembly whose generated members take the handle of an internal
+	///     service that another module of that assembly registers and declares, but it does not import that module, so
+	///     nothing builds the service.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHandleProviderNotImported = new(
+		"AWT238",
+		"Module that provides an internal service not imported",
+		"The imported module '{0}' needs the internal service '{1}', which the module '{2}' of the same assembly registers; import '{2}' too",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

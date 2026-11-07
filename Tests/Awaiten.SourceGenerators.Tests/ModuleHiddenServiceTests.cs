@@ -475,6 +475,37 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task InternalServiceOfAnotherModule_IsTakenThroughThatModulesHandle()
+	{
+		GeneratorResult result = RunLibrary("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal sealed class BeanStore { }
+			internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore>]
+			public static partial class StorageModule { }
+
+			[Module]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class CoffeeModule { }
+			""");
+		string handle = $"global::Lib.StorageModule.Internals.Hidden_BeanStore_{Fnv1a("global::Lib.BeanStore"):x8}";
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a module may take the handle another module of its assembly declares");
+		await That(result.Sources.Single(source => source.Key.Contains("CoffeeModule")).Value)
+			.Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}({handle} @store) => new global::Lib.Grinder(@store.Value);");
+		await That(result.Sources.Single(source => source.Key.Contains("StorageModule")).Value)
+			.Contains($"public static {handle} {HiddenFactory("global::Lib.BeanStore")}()")
+			.Because("in an assembly with several modules, each module builds every internal service it can, since another module may need it");
+	}
+
+	[Test]
 	public async Task SameAssemblyContainer_ConstructsTheInternalServiceDirectly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -593,7 +624,54 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
-		public async Task TwoModulesRegisteringOneInternalImplementation_KeepTheirHandlesApart()
+		public async Task InternalServiceOfAnotherModule_IsResolvedFromThatModule()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(StorageAndCoffee, """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(StorageModule))]
+				[Import(typeof(CoffeeModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the storage module registers the handle the coffee module's factory takes");
+		}
+
+		[Test]
+		public async Task InternalServiceOfAModuleNotImported_ReportsAwt238()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(StorageAndCoffee, Container);
+
+			await That(result.Diagnostics).Contains("*AWT238*'Lib.CoffeeModule'*'Lib.BeanStore'*'Lib.StorageModule'*import 'Lib.StorageModule' too*").AsWildcard();
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
+				.Because("the missing import is the one cause, so the missing handle is not reported again");
+		}
+
+		private const string StorageAndCoffee = """
+		                                        using Awaiten;
+
+		                                        namespace Lib;
+
+		                                        public interface IGrinder { }
+		                                        internal sealed class BeanStore { }
+		                                        internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+		                                        [Module]
+		                                        [Singleton<BeanStore>]
+		                                        public static partial class StorageModule { }
+
+		                                        [Module]
+		                                        [Singleton<Grinder, IGrinder>]
+		                                        public static partial class CoffeeModule { }
+		                                        """;
+
+		[Test]
+		public async Task TwoModulesRegisteringOneInternalImplementation_ShareOneInstance()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
 				using Awaiten;
@@ -627,8 +705,13 @@ public class ModuleHiddenServiceTests
 				public static partial class MyContainer;
 				""");
 
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
 			await That(result.Diagnostics).IsEmpty()
-				.Because("each module's handle is a registration of its own, so the two never conflict");
+				.Because("both registrations coalesce into one, as in a container of the modules' own assembly");
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{HiddenFactory("global::Lib.BeanStore")}()")
+				.And.DoesNotContain($"global::Lib.RoastingModule.Internals.{HiddenFactory("global::Lib.BeanStore")}()")
+				.Because("the module first by name declares the handle and builds the one shared instance");
 		}
 
 		[Test]
@@ -798,7 +881,7 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
-		public async Task InternalServiceOfAnotherModule_ReportsAwt236()
+		public async Task InternalServiceOfAModuleThatCannotShareItsHandle_ReportsAwt236()
 		{
 			GeneratorResult result = RunLibrary("""
 				using Awaiten;
@@ -811,14 +894,15 @@ public class ModuleHiddenServiceTests
 
 				[Module]
 				[Singleton<BeanStore>]
-				public static partial class StorageModule { }
+				public static class StorageModule { }
 
 				[Module]
 				[Singleton<Grinder, IGrinder>]
 				public static partial class CoffeeModule { }
 				""");
 
-			await That(result.Diagnostics).Contains("*AWT236*'Lib.BeanStore'*only the module 'Lib.StorageModule'*register 'Lib.BeanStore' in 'Lib.CoffeeModule' too*").AsWildcard();
+			await That(result.Diagnostics).Contains("*AWT236*'Lib.BeanStore'*only the module 'Lib.StorageModule'*register 'Lib.BeanStore' in 'Lib.CoffeeModule' too*").AsWildcard()
+				.Because("a module that is not partial cannot declare the handle another module would take");
 		}
 
 		[Test]

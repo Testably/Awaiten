@@ -131,6 +131,7 @@
  AWT235  | Awaiten   | Error    | A [Module] or [Container] declares a member named Internals, which is reserved for the nested class that holds its generated members
  AWT236  | Awaiten   | Error    | A self-compiled module member needs an internal service that only another module of the same assembly registers, which the module's generated handles cannot serve
  AWT237  | Awaiten   | Error    | A self-compiled module member takes an internal service the module registers in a shape its generated factory cannot pass on from the service's handle
+ AWT238  | Awaiten   | Error    | A container imports a module whose generated members take the handle of an internal service that another module of the same assembly registers, without importing that module
  AWT240  | Awaiten   | Error    | A scan match of an imported module in another assembly cannot share one instance with another registration of its implementation, which the container builds as a type that does not convert to the match's service
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

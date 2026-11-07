@@ -2264,7 +2264,7 @@ public static partial class CoffeeShop
 ### AWT236
 
 :::danger[Error]
-A self-compiled module registration needs an internal service that the module doesn't register, but another module of the same assembly does.
+A self-compiled module registration needs an internal service that the module doesn't register, and another module of the same assembly registers it but can't share its handle.
 :::
 
 ```csharp expect=AWT236
@@ -2273,16 +2273,16 @@ internal sealed class Grinder(BeanStore beans) : IGrinder;
 
 [Module]
 [Singleton<BeanStore>]
-public static partial class StorageModule;
+public static class StorageModule;     // not partial, so it can't declare the handle
 
 [Module]
 [Singleton<Grinder, IGrinder>]   // BeanStore is registered only in StorageModule
 public static partial class CoffeeModule;
 ```
 
-A container in another assembly reaches an internal service only through the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of the module that registers it, and a handle serves only that module. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
+A container in another assembly reaches an internal service only through its [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), which one module of the assembly declares for all of them. A module can't declare it when it isn't `partial`, or when it can't build the service on its own. A scan match can't take a service of another module either. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
 
-**Fix:** Register the internal service in the module that needs it too, or move both registrations into one module.
+**Fix:** Make the other module `partial`, register the internal service in the module that needs it too, or move both registrations into one module.
 
 ### AWT237
 
@@ -2303,6 +2303,32 @@ public static partial class CoffeeModule;
 The factory takes the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of the internal service in the same shape and passes the instance it holds on. It can do that for the service itself and for `Func<T>`, `Lazy<T>`, `Owned<T>`, `Func<Owned<T>>` and the collections of `T`, but not for other shapes such as `Task<T>`, `Lazy<Task<T>>` or a keyed dictionary. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
 
 **Fix:** Take the internal service in one of the supported shapes, or make the service public.
+
+### AWT238
+
+:::danger[Error]
+A container imports a module that needs an internal service of another module of its assembly, but not that other module.
+:::
+
+```csharp no-compile
+// Lib
+[Module]
+[Singleton<BeanStore>]
+public static partial class StorageModule;
+
+[Module]
+[Singleton<Grinder, IGrinder>]   // Grinder takes the internal BeanStore
+public static partial class CoffeeModule;
+
+// App
+[Container]
+[Import(typeof(CoffeeModule))]   // StorageModule is not imported
+public static partial class CoffeeShop;
+```
+
+The generated factory of `Grinder` takes the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of `BeanStore`, which `StorageModule` declares and builds. Without importing `StorageModule`, nothing registers it.
+
+**Fix:** Import the module the message names too.
 
 ### AWT240
 
