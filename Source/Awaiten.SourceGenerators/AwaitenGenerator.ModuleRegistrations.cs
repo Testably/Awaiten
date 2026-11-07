@@ -681,7 +681,7 @@ partial class AwaitenGenerator
 				hidden ? subject with { Subject = $"'{Display(typeName)}' is private to the module, so every container builds it through the module's one factory" } : subject,
 				string.Join(", ", services.Select(Display)),
 				hidden
-					? "give it a base type or interface that covers its services, register it under a single service, or make it internal to share one instance through a generated handle"
+					? "give it a base type or interface that covers its services, register it under a single service, or make it internal so every container shares one instance"
 					: "register it under a single service, give it a public base type or interface that covers its services, or make the implementation public",
 				all.First(registration => !SymbolEqualityComparer.Default.Equals(registration.Service, first.Service)).Location,
 				rejections);

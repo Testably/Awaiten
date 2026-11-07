@@ -290,7 +290,7 @@ public partial class DiagnosticTests
 					{{(container ? "[Container]\n[Import(typeof(GreetingModule))]\npublic static partial class MyContainer;" : "")}}
 					""");
 
-				await That(result.Diagnostics).Contains($"*AWT197*'Lib.GreetingModule.Greeter' is private to the module*(Lib.{first}, Lib.{second})*make it internal*").AsWildcard()
+				await That(result.Diagnostics).Contains($"*AWT197*'Lib.GreetingModule.Greeter' is private to the module*(Lib.{first}, Lib.{second})*make it internal so every container shares one instance*").AsWildcard()
 					.Because("no container can name the private type to hold the one instance its services share, so the library build reports it whichever container imports the module");
 			}
 
