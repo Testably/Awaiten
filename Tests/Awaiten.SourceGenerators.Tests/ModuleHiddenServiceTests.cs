@@ -1022,7 +1022,7 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
-		public async Task CompositeOfAnInternalService_ReportsAwt230()
+		public async Task CompositeOfAnInternalService_IsBuiltIntoItsHandle()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
 				using System.Collections.Generic;
@@ -1043,8 +1043,9 @@ public class ModuleHiddenServiceTests
 				public static partial class CoffeeModule { }
 				""", Container);
 
-			await That(result.Diagnostics).Contains("*AWT230*AllStores*").AsWildcard()
-				.Because("the module builds no composite into a handle, so a container in another assembly cannot construct it");
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains($"global::Lib.CoffeeModule.Internals.Composite_AllStores_{Fnv1a("global::Lib.AllStores\0global::Lib.IBeanStore"):x8}(")
+				.Because("the module builds the composite into a handle of the internal service, which a container in another assembly fronts it with");
 		}
 
 		[Test]
@@ -1558,6 +1559,86 @@ public class ModuleHiddenServiceTests
 
 			await That(result.Diagnostics).HasSingle().Which.Contains($"*{id}*'{member}'*").AsWildcard()
 				.Because("a friend builds the internal services itself and registers no handles, so it names the private member it cannot see instead of a missing service");
+		}
+	}
+
+	public class PrivateCompositeOfAnInternalService
+	{
+		private const string Container = """
+			[Container]
+			[Import(typeof(CoffeeModule))]
+			public static partial class MyContainer;
+			""";
+
+		private static readonly string Composite = $"Composite_AllStores_{Fnv1a("global::Lib.CoffeeModule.AllStores\0global::Lib.IBeanStore"):x8}";
+
+		private static string Library(bool consumed, bool grant = false) => $$"""
+			using System.Collections.Generic;
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal interface IBeanStore { }
+			internal sealed class BeanStore : IBeanStore { }
+			internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore, IBeanStore>]
+			{{(consumed ? "[Singleton<Grinder, IGrinder>]" : "")}}
+			[Composite<CoffeeModule.AllStores, IBeanStore>]
+			public static partial class CoffeeModule
+			{
+			    private sealed class AllStores : IBeanStore { public AllStores(IEnumerable<IBeanStore> stores) { } }
+			}
+			""";
+
+		[Test]
+		[Arguments(true, false)]
+		[Arguments(false, false)]
+		[Arguments(true, true)]
+		[Arguments(false, true)]
+		public async Task Library_BuildsCleanly(bool consumed, bool grant)
+		{
+			GeneratorResult result = Generator.Run(Library(consumed, grant));
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("no public generated member names the internal service or the private composite");
+			await That(ModuleSource(result)).Contains($"public static {Handle("global::Lib.IBeanStore")} {Composite}(")
+				.And.Contains($"internal static global::Lib.IBeanStore Internal{Composite}(global::System.Collections.Generic.IEnumerable<global::Lib.IBeanStore> @stores)")
+				.Because("the public factory builds the composite into the handle of the internal service, the internal one takes and returns the service itself");
+		}
+
+		[Test]
+		public async Task ContainerInTheModulesAssembly_BuildsItThroughTheInternalFactory()
+		{
+			GeneratorResult result = Generator.Run(Library(consumed: true) + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.Lib.MyContainer.g.cs"]).Contains($"global::Lib.CoffeeModule.Internals.Internal{Composite}(");
+		}
+
+		[Test]
+		public async Task ContainerInAnAssemblyGrantedInternalsVisibleTo_BuildsItThroughTheInternalFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(consumed: true, grant: true), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains($"Internals.Internal{Composite}(").And.DoesNotContain("Hidden")
+				.Because("a friend builds the internal services itself and registers no handles");
+		}
+
+		[Test]
+		public async Task ContainerInAnotherAssembly_FrontsTheHandleWithIt()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(consumed: true), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains($"Internals.{Composite}(")
+				.Because("a container that cannot name the internal service builds the composite into its handle");
 		}
 	}
 

@@ -758,14 +758,14 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The disposal traits of every decorator the other modules of the assembly declare over
+	///     The disposal traits of every decorator and composite the other modules of the assembly declare over
 	///     <paramref name="service" />, which they build into its handle, so the handle carries a variant for each.
 	/// </summary>
 	private static IEnumerable<ImplementationTraits> OtherModulesDecoratorTraits(INamedTypeSymbol service, HiddenServices hidden)
 		=> hidden.Assembly.Modules
 			.Where(other => !SymbolEqualityComparer.Default.Equals(other, hidden.Module))
 			.SelectMany(other => other.GetAttributes())
-			.Where(attribute => attribute.AttributeClass is { Name: "DecorateAttribute", } attributeClass
+			.Where(attribute => attribute.AttributeClass is { Name: "DecorateAttribute" or "CompositeAttribute", } attributeClass
 			                    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
 			                    && ContributedPair(attribute, attributeClass) is ({ }, { } decorated)
 			                    && SymbolEqualityComparer.Default.Equals(decorated, service))
@@ -974,14 +974,15 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The factory of a decorator the module declares over an internal service it registers, or that another module
-	///     of its assembly provides (see <see cref="HiddenServices.ProvidedElsewhere" />), or
-	///     <see langword="null" /> when it cannot be built, so a consuming container reports the decorator as before
-	///     (AWT230). It mirrors the constructor like any decorator factory, so the inner parameter takes the service's
-	///     handle, and wraps the decorator in a handle of the same service, in the variant that matches its disposal.
-	///     A consumer then keeps each link of the chain as an instance of its own, with its own disposal.
+	///     The factory of a decorator or composite the module declares over an internal service it registers, or that
+	///     another module of its assembly provides (see <see cref="HiddenServices.ProvidedElsewhere" />), or
+	///     <see langword="null" /> when it cannot be built, so a consuming container reports it as before (AWT230). It
+	///     mirrors the constructor like any decorator or composite factory, so the inner parameter of a decorator takes
+	///     the service's handle and the collection of a composite the handles, and wraps the decorator or composite in a
+	///     handle of the same service, in the variant that matches its disposal. A consumer then keeps each link of a
+	///     chain as an instance of its own, with its own disposal, and fronts the handle with the composite.
 	/// </summary>
-	private static RegistrationFactory? HiddenDecoratorFactory(INamedTypeSymbol decorator, INamedTypeSymbol service, string name, ModuleScanContext context)
+	private static RegistrationFactory? HiddenContributionFactory(INamedTypeSymbol decorator, INamedTypeSymbol service, string name, bool composite, ModuleScanContext context)
 	{
 		HiddenServices hidden = context.Hidden!;
 		if (hidden.NonViable.Contains(service)
@@ -991,7 +992,7 @@ partial class AwaitenGenerator
 		}
 
 		string typeName = decorator.ToDisplayString(FullyQualified);
-		SelfCompiledSubject subject = new(typeName, $"'{Display(typeName)}' decorates the internal service '{Display(service.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module");
+		SelfCompiledSubject subject = new(typeName, $"'{Display(typeName)}' {(composite ? "composes" : "decorates")} the internal service '{Display(service.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module");
 		string handle = hidden.HandleType(service);
 		List<HiddenInitializer> initializers = new();
 		if (!TryMirrorFactoryParameters(decorator, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)

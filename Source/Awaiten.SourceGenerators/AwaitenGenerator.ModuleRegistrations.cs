@@ -352,7 +352,8 @@ partial class AwaitenGenerator
 	///     and the injected properties like the factory of a registration, so a decorator's inner parameter stays the one
 	///     a container redirects to the next link of the chain, and a composite's collection parameter the one it fills.
 	///     A type the factory cannot express gets none and no error in the module's build: a container that cannot
-	///     construct it reports it at its <c>[Import]</c> (AWT230), as before.
+	///     construct it reports it at its <c>[Import]</c> (AWT230), as before. In the module's own build, one over an
+	///     internal service is built into the service's handle instead (see <see cref="HiddenContributionFactory" />).
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation, HiddenServices? hidden = null)
 	{
@@ -374,9 +375,9 @@ partial class AwaitenGenerator
 			}
 
 			RegistrationFactory? built;
-			if (hidden is not null && attributeClass.Name == "DecorateAttribute" && (hidden.Services.ContainsKey(service) || hidden.ProvidedElsewhere(service)))
+			if (hidden is not null && (hidden.Services.ContainsKey(service) || hidden.ProvidedElsewhere(service)))
 			{
-				built = HiddenDecoratorFactory(type, service, name, context);
+				built = HiddenContributionFactory(type, service, name, attributeClass.Name == "CompositeAttribute", context);
 			}
 			else if (SelfCompilesRegistration(module, type, service, compilation))
 			{
@@ -416,6 +417,7 @@ partial class AwaitenGenerator
 	{
 		SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
 		return FactoryReturnType(type, [service,], context) is { } returnType
+		       && FitsFactorySignature(returnType, context)
 		       && TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
 		       && TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out MirroredMembers members)
 			? new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members.Required, OptionalMembers: members.Optional, DeferredMembers: members.Deferred)

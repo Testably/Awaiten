@@ -131,7 +131,9 @@ internal sealed record OwnerFactoryCall(INamedTypeSymbol Owner, string Name, str
 ///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration: the composed service, the service and
 ///     composite symbols, the lifetime (default transient) and the fronted <see cref="Key" />
 ///     (<see langword="null" /> for the unkeyed registrations). Applied after coalescing (and decorator chains) as
-///     the public single-dispatch winner, excluded from collection membership.
+///     the public single-dispatch winner, excluded from collection membership. <see cref="ThroughHandle" /> marks a
+///     composite a module of another assembly builds into the handle of a service it registers under an internal type,
+///     which fronts that handle.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record CompositeRegistration(
@@ -142,7 +144,8 @@ internal sealed record CompositeRegistration(
 	Location? Location,
 	string? Key,
 	OwnerFactoryCall? Via = null,
-	INamedTypeSymbol? Owner = null);
+	INamedTypeSymbol? Owner = null,
+	bool ThroughHandle = false);
 
 /// <summary>
 ///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound

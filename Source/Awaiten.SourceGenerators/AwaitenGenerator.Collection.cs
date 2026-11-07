@@ -1219,12 +1219,10 @@ partial class AwaitenGenerator
 				if (ContributedPair(attribute, attributeClass) is ({ } decorator, { } service))
 				{
 					// A module of another assembly builds a decorator of an internal service into the service's handle, which the chain then decorates.
-					bool throughHandle = via?.Producer is { MethodKind: MethodKind.Ordinary, ReturnType: INamedTypeSymbol handle, }
-					                     && handle.Name == HiddenHandleName(service)
-					                     && !compilation.IsSymbolAccessibleWithin(service, compilation.Assembly);
-					INamedTypeSymbol decorated = throughHandle ? (INamedTypeSymbol)via!.Producer.ReturnType : service;
+					INamedTypeSymbol? handle = HandleProducedBy(via, service, compilation);
+					INamedTypeSymbol decorated = handle ?? service;
 					closed.Add(new DecorateRegistration(
-						decorated.ToDisplayString(FullyQualified), decorated, decorator, order, declarationOrder, location, keys, inherited, via, module, throughHandle));
+						decorated.ToDisplayString(FullyQualified), decorated, decorator, order, declarationOrder, location, keys, inherited, via, module, handle is not null));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -1242,6 +1240,18 @@ partial class AwaitenGenerator
 
 		return (closed, open);
 	}
+
+	/// <summary>
+	///     The handle of <paramref name="service" /> that the generated factory <paramref name="via" /> of a module of
+	///     another assembly builds a decorator or composite into, because this container cannot name the internal service,
+	///     or <see langword="null" />.
+	/// </summary>
+	private static INamedTypeSymbol? HandleProducedBy(OwnerFactoryCall? via, INamedTypeSymbol service, Compilation compilation)
+		=> via?.Producer is { MethodKind: MethodKind.Ordinary, ReturnType: INamedTypeSymbol handle, }
+		   && handle.Name == HiddenHandleName(service)
+		   && !compilation.IsSymbolAccessibleWithin(service, compilation.Assembly)
+			? handle
+			: null;
 
 	/// <summary>
 	///     Reads the <c>Keys</c> and <c>AllKeys</c> named arguments of a <c>[Decorate]</c> as the selected canonical
@@ -1372,8 +1382,11 @@ partial class AwaitenGenerator
 			{
 				if (ContributedPair(attribute, attributeClass) is ({ } composite, { } service))
 				{
+					// A module of another assembly builds a composite of an internal service into the service's handle, which it then fronts.
+					INamedTypeSymbol? handle = HandleProducedBy(via, service, compilation);
+					INamedTypeSymbol composed = handle ?? service;
 					closed.Add(new CompositeRegistration(
-						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key, via, module));
+						composed.ToDisplayString(FullyQualified), composed, composite, lifetime, location, key, via, module, handle is not null));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2

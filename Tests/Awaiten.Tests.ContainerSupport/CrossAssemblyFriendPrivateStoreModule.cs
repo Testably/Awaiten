@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Awaiten.Tests.ContainerSupport;
@@ -77,3 +79,68 @@ public static partial class SupportFriendPrivateStoreModule
 [Container]
 [Import(typeof(SupportFriendPrivateStoreModule))]
 public static partial class FriendPrivateStoreLocalContainer;
+
+/// <summary>A shelf of internal bean stores that a composite private to its module fronts.</summary>
+public interface IFriendShelfState
+{
+	/// <summary>How many stores the shelf fronts.</summary>
+	int Count { get; }
+
+	/// <summary>Whether the container disposed the shelf.</summary>
+	bool Disposed { get; }
+}
+
+/// <summary>A barista that takes the internal shelf store, which the private composite fronts.</summary>
+public interface IFriendShelfBarista
+{
+	/// <summary>The shelf store the barista was constructed with.</summary>
+	IFriendShelfState Shelf { get; }
+}
+
+internal interface IFriendShelfStore : IFriendShelfState;
+
+internal sealed class FriendFirstShelfStore : IFriendShelfStore
+{
+	public int Count => 1;
+
+	public bool Disposed => false;
+}
+
+internal sealed class FriendSecondShelfStore : IFriendShelfStore
+{
+	public int Count => 1;
+
+	public bool Disposed => false;
+}
+
+internal sealed class FriendShelfBarista(IFriendShelfStore shelf) : IFriendShelfBarista
+{
+	public IFriendShelfState Shelf => shelf;
+}
+
+/// <summary>
+///     A <c>[Module]</c> with a disposable composite private to it over an internal service. A container in this
+///     assembly, or in Awaiten.Tests, which this assembly grants <c>InternalsVisibleTo</c>, builds it through the
+///     module's internal factory.
+/// </summary>
+[Module]
+[Singleton<FriendFirstShelfStore, IFriendShelfStore>]
+[Singleton<FriendSecondShelfStore, IFriendShelfStore>]
+[Singleton<FriendShelfBarista, IFriendShelfBarista>]
+[Composite<SupportFriendPrivateShelfModule.AllStores, IFriendShelfStore>(Lifetime = Lifetime.Singleton)]
+public static partial class SupportFriendPrivateShelfModule
+{
+	private sealed class AllStores(IEnumerable<IFriendShelfStore> stores) : IFriendShelfStore, IDisposable
+	{
+		public int Count => stores.Sum(store => store.Count);
+
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+}
+
+/// <summary>A container in the module's own assembly that imports <see cref="SupportFriendPrivateShelfModule" />.</summary>
+[Container]
+[Import(typeof(SupportFriendPrivateShelfModule))]
+public static partial class FriendPrivateShelfLocalContainer;

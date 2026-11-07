@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Awaiten.Tests.Support;
@@ -68,6 +70,65 @@ public static partial class CrossAssemblyPrivateStoreModule
 			Started = true;
 			return Task.CompletedTask;
 		}
+
+		public void Dispose() => Disposed = true;
+	}
+}
+
+/// <summary>A shelf of internal bean stores that a composite private to its module fronts.</summary>
+public interface IShelfState
+{
+	/// <summary>How many stores the shelf fronts.</summary>
+	int Count { get; }
+
+	/// <summary>Whether the container disposed the shelf.</summary>
+	bool Disposed { get; }
+}
+
+/// <summary>A barista that takes the internal shelf store, which the private composite fronts.</summary>
+public interface IShelfBarista
+{
+	/// <summary>The shelf store the barista was constructed with.</summary>
+	IShelfState Shelf { get; }
+}
+
+internal interface IShelfStore : IShelfState;
+
+internal sealed class FirstShelfStore : IShelfStore
+{
+	public int Count => 1;
+
+	public bool Disposed => false;
+}
+
+internal sealed class SecondShelfStore : IShelfStore
+{
+	public int Count => 1;
+
+	public bool Disposed => false;
+}
+
+internal sealed class ShelfBarista(IShelfStore shelf) : IShelfBarista
+{
+	public IShelfState Shelf => shelf;
+}
+
+/// <summary>
+///     A <c>[Module]</c> with a disposable composite private to it over an internal service. Its build builds the
+///     composite into the handle of the service, so a container in another assembly fronts the handle with it.
+/// </summary>
+[Module]
+[Singleton<FirstShelfStore, IShelfStore>]
+[Singleton<SecondShelfStore, IShelfStore>]
+[Singleton<ShelfBarista, IShelfBarista>]
+[Composite<CrossAssemblyPrivateShelfModule.AllStores, IShelfStore>(Lifetime = Lifetime.Singleton)]
+public static partial class CrossAssemblyPrivateShelfModule
+{
+	private sealed class AllStores(IEnumerable<IShelfStore> stores) : IShelfStore, IDisposable
+	{
+		public int Count => stores.Sum(store => store.Count);
+
+		public bool Disposed { get; private set; }
 
 		public void Dispose() => Disposed = true;
 	}

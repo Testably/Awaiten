@@ -67,9 +67,64 @@ public partial class ModulePrivateImplementationTests
 			.Because("the container releases and disposes the singleton it built");
 	}
 
+	[Test]
+	public async Task CompositeInAnotherAssembly_FrontsEveryRegistrationAndIsDisposed()
+	{
+		IShelfState shelf;
+		using (PrivateShelfContainer.Root container = new())
+		{
+			shelf = container.Resolve<IShelfBarista>().Shelf;
+
+			await That(shelf.Count).IsEqualTo(2)
+				.Because("the private composite fronts the handle of the internal service and receives both of its registrations");
+			await That(shelf.Disposed).IsFalse();
+		}
+
+		await That(shelf.Disposed).IsTrue()
+			.Because("the handle the composite is built into forwards disposal to it");
+	}
+
+	[Test]
+	public async Task CompositeInAnAssemblyGrantedInternalsVisibleTo_FrontsEveryRegistrationAndIsDisposed()
+	{
+		IFriendShelfState shelf;
+		using (FriendPrivateShelfContainer.Root container = new())
+		{
+			shelf = container.Resolve<IFriendShelfBarista>().Shelf;
+
+			await That(shelf.Count).IsEqualTo(2)
+				.Because("the container builds the private composite through its internal factory over both registrations");
+		}
+
+		await That(shelf.Disposed).IsTrue();
+	}
+
+	[Test]
+	public async Task CompositeInTheModulesAssembly_FrontsEveryRegistrationAndIsDisposed()
+	{
+		IFriendShelfState shelf;
+		using (FriendPrivateShelfLocalContainer.Root container = new())
+		{
+			shelf = container.Resolve<IFriendShelfBarista>().Shelf;
+
+			await That(shelf.Count).IsEqualTo(2)
+				.Because("the container builds the private composite through its internal factory over both registrations");
+		}
+
+		await That(shelf.Disposed).IsTrue();
+	}
+
 	[Container]
 	[Import(typeof(CrossAssemblyPrivateStoreModule))]
 	public static partial class PrivateStoreContainer;
+
+	[Container]
+	[Import(typeof(CrossAssemblyPrivateShelfModule))]
+	public static partial class PrivateShelfContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendPrivateShelfModule))]
+	public static partial class FriendPrivateShelfContainer;
 
 	[Container]
 	[Import(typeof(SupportFriendPrivateStoreModule))]
