@@ -13,7 +13,8 @@ public partial class DiagnosticTests
 
 			public interface IAppliance { }
 			public interface IKettle { }
-			internal sealed class Kettle : IAppliance, IKettle { }
+			internal interface IHiddenKettle { }
+			internal sealed class Kettle : IAppliance, IKettle, IHiddenKettle { }
 
 			{{modules}}
 
@@ -31,6 +32,12 @@ public partial class DiagnosticTests
 		private const string KettleScanModule = """
 			[Module]
 			[Scan<IKettle>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+			public static partial class KettleModule { }
+			""";
+
+		private const string HandleModule = """
+			[Module]
+			[Singleton<Kettle, IHiddenKettle>]
 			public static partial class KettleModule { }
 			""";
 
@@ -129,6 +136,27 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT240*").AsWildcard()
 				.And.Contains("*AWT141*MyCode.Toaster*").AsWildcard()
 				.Because("dropping the unshared match leaves nothing to resolve IAppliance, so the opted-in match is skipped instead of failing with AWT101");
+		}
+
+		[Test]
+		public async Task AScanMatchOfAnImplementationAnotherModuleBuildsThroughAHandle_ReportsAwt240()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(HandleModule, grant: false), Consumer);
+
+			await That(result.Diagnostics).HasCount(1);
+			await That(result.Diagnostics).Contains("*AWT240*'Lib.Kettle' is matched by the [Scan] of the imported module 'Lib.ScanModule' as 'Lib.IAppliance', but this container builds its one instance of 'Lib.Kettle' as 'Lib.IHiddenKettle (internal to module Lib.KettleModule)'*").AsWildcard()
+				.Because("the handle hides the instance, and no alias serves it under the match's service");
+		}
+
+		[Test]
+		public async Task AScanMatchOfAnImplementationAnotherModuleBuildsThroughAHandleAndAnAliasOfTheMatchsService_SharesTheAlias()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(HandleModule.Replace("[Singleton<Kettle, IHiddenKettle>]", "[Singleton<Kettle, IHiddenKettle>]\n[Singleton<Kettle, IAppliance>]"), grant: false), Consumer);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the match serves the handle's instance through the alias of its service");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("Internals.Alias_Kettle_").Exactly(1)
+				.And.DoesNotContain("Scan_Kettle_");
 		}
 
 		[Test]

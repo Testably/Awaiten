@@ -627,6 +627,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// A scan match a module's generated factory builds shares the instance of every other registration of its
 		// implementation, as it would in the module's own assembly.
+		ShareHandledInstances(raw, compilation, diagnostics);
 		List<string> sharedScanImplementations = ShareScannedInstances(raw, compilation);
 
 		// A scanned private nested type the resolvers cannot stand in for is skipped with AWT193, not the AWT216 error.

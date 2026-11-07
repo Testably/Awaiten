@@ -216,6 +216,8 @@ public static partial class ApplianceModule;   // a container that imports both 
 
 The shared instance has the type the winning registration produces. Here that is `IBoiler`, the type the registration's factory returns, which doesn't convert to `IAppliance`. A container that can construct the implementation, because it is public or the library grants the container's assembly `InternalsVisibleTo`, then constructs it once for the registration and the match. Any other container reports [AWT240](../09-diagnostics.md#awt240) and drops the match, because the match's factory would build a second instance.
 
+When another module builds the implementation through a [generated handle](#services-only-the-module-uses), the handle hides the instance. A container in another assembly then serves the match from the handle when that module also registers the implementation under the match's interface or one that converts to it, and otherwise reports [AWT240](../09-diagnostics.md#awt240) and drops the match.
+
 ## One level deep
 
 Imports are not transitive. A module's own `[Import]` is not followed. Keep the container as the single place that composes modules. (A module's own `[Scan]`, by contrast, does reach the importing container: expanded directly by the container for a same-assembly module, or self-compiled in the module's build across assemblies, see above.)

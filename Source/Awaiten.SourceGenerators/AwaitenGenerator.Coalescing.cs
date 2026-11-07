@@ -39,6 +39,58 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Lets the scan match of a module in another assembly share the instance of an implementation another module
+	///     builds through a generated handle (see <see cref="ThroughHandle" />). The handle hides the instance, so the
+	///     match can only serve it through an alias that serves the implementation under a service that converts to the
+	///     match's service, whose identity it takes so coalescing keeps one instance. Without such an alias the match's
+	///     factory would build a second instance, so the match is dropped after reporting AWT240.
+	/// </summary>
+	private static void ShareHandledInstances(List<RawRegistration> raw, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		List<RawRegistration> handles = raw.Where(registration => registration.Hidden is not null && registration.ImplementationType.Contains(HiddenKeyMarker)).ToList();
+		for (int index = raw.Count - 1; index >= 0 && handles.Count > 0; index--)
+		{
+			if (raw[index] is not { ScanImplementation: { } implementation, ServiceSymbol: { } service, } match
+			    || handles.FirstOrDefault(handle => SymbolEqualityComparer.Default.Equals(handle.Hidden, implementation)) is not { } handle)
+			{
+				continue;
+			}
+
+			if (raw.FirstOrDefault(alias => alias.ServiceSymbol is { } aliased
+			                                && alias.ImplementationType.StartsWith(alias.ServiceType + AliasKeyMarker, StringComparison.Ordinal)
+			                                && alias.ImplementationType.EndsWith("." + HiddenAliasName(implementation, aliased), StringComparison.Ordinal)
+			                                && compilation.HasImplicitConversion(aliased, service)) is { } alias)
+			{
+				raw[index] = match with
+				{
+					ImplementationType = alias.ImplementationType,
+					Implementation = alias.Implementation,
+					Origin = alias.Origin,
+					Production = alias.Production,
+					ProductionMember = alias.ProductionMember,
+					OnActivated = null,
+					OnRelease = null,
+					Traits = alias.Traits,
+					TraitsExact = true,
+					ScanImplementation = null,
+				};
+				continue;
+			}
+
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanMatchNotShared,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([
+					Display(implementation.ToDisplayString(FullyQualified)),
+					Display(match.Origin!.ToDisplayString(FullyQualified)),
+					Display(match.ServiceType),
+					Display(handle.ServiceType),
+				])));
+			raw.RemoveAt(index);
+		}
+	}
+
+	/// <summary>
 	///     Gives the scan match of a module in another assembly the identity of the implementation its generated factory
 	///     builds (see <see cref="RawRegistration.ScanImplementation" />) when another registration or scan match names
 	///     that implementation too, so coalescing shares one instance between them, as a container in the module's own
