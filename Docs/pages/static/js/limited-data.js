@@ -2,12 +2,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=8)": {
     "commits": [
       {
-        "sha": "f6700169d471b10566ca9a1ff5d8bfa6a8039590",
-        "author": "Valentin Breu\u00DF",
-        "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
-        "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
-      },
-      {
         "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
@@ -300,10 +294,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
         "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
+      },
+      {
+        "sha": "7392f6a7fc44a386afdf13af15adeefdb4982b8d",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
+        "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
       }
     ],
     "labels": [
-      "f6700169",
       "a15aa752",
       "920d5079",
       "67dedfaf",
@@ -352,14 +351,14 @@ window.BENCHMARK_DATA = {
       "25c12b4f",
       "e3f54e32",
       "0d542565",
-      "1f582413"
+      "1f582413",
+      "7392f6a7"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          7.862874705592791,
           7.062152735392252,
           7.923158081372579,
           7.795422600848334,
@@ -408,7 +407,8 @@ window.BENCHMARK_DATA = {
           7.60893460895334,
           5.442413080483675,
           7.754577210793893,
-          9.328384884198506
+          9.328384884198506,
+          7.159590562539441
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -484,7 +484,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          8.689235616723696,
           7.811177894473076,
           8.299504019893133,
           7.2516492913876265,
@@ -533,7 +532,8 @@ window.BENCHMARK_DATA = {
           7.504670562346776,
           6.684987880862677,
           8.610362975725106,
-          6.884327889553139
+          6.884327889553139,
+          7.2492813984553015
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -609,7 +609,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          148.55068585077922,
           120.64650362730026,
           105.96216542904193,
           133.69580919401986,
@@ -658,7 +657,8 @@ window.BENCHMARK_DATA = {
           116.95757095019023,
           96.40774822235107,
           118.41469117800395,
-          140.5269817193349
+          140.5269817193349,
+          153.54467698505945
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -734,7 +734,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          8.779967521627745,
           8.713035894930362,
           8.036642401417096,
           9.08316077717713,
@@ -783,7 +782,8 @@ window.BENCHMARK_DATA = {
           9.831362144305157,
           6.5507001007596655,
           9.726211112279158,
-          10.293473132451375
+          10.293473132451375,
+          8.978432696064313
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -859,7 +859,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11.591786737625416,
           11.401660260558128,
           11.60718772961543,
           11.188890989869833,
@@ -908,7 +907,8 @@ window.BENCHMARK_DATA = {
           11.170236507287392,
           8.367060718933741,
           11.018385034054518,
-          12.220266785224279
+          12.220266785224279,
+          11.042006477713585
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -985,12 +985,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=256)": {
     "commits": [
       {
-        "sha": "f6700169d471b10566ca9a1ff5d8bfa6a8039590",
-        "author": "Valentin Breu\u00DF",
-        "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
-        "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
-      },
-      {
         "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
@@ -1283,10 +1277,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
         "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
+      },
+      {
+        "sha": "7392f6a7fc44a386afdf13af15adeefdb4982b8d",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
+        "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
       }
     ],
     "labels": [
-      "f6700169",
       "a15aa752",
       "920d5079",
       "67dedfaf",
@@ -1335,14 +1334,14 @@ window.BENCHMARK_DATA = {
       "25c12b4f",
       "e3f54e32",
       "0d542565",
-      "1f582413"
+      "1f582413",
+      "7392f6a7"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          8.675854024978785,
           7.8650856733322145,
           7.659015624569013,
           8.449745109925667,
@@ -1391,7 +1390,8 @@ window.BENCHMARK_DATA = {
           8.723820370435714,
           6.071785822510719,
           8.460138532977838,
-          10.140788753827414
+          10.140788753827414,
+          8.16533014178276
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1467,7 +1467,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          8.430168521404266,
           6.066863006779125,
           8.273889307464872,
           7.274175015091896,
@@ -1516,7 +1515,8 @@ window.BENCHMARK_DATA = {
           7.444825304547946,
           6.529049445192019,
           7.301970677716391,
-          6.884511306881905
+          6.884511306881905,
+          7.346310789768513
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1592,7 +1592,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          144.49937499364216,
           102.87026645342509,
           104.10781985521317,
           132.4365527311961,
@@ -1641,7 +1640,8 @@ window.BENCHMARK_DATA = {
           109.60562057495117,
           96.71319056408745,
           133.15486079851786,
-          145.9845119714737
+          145.9845119714737,
+          130.8045763373375
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1717,7 +1717,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          8.732412988940874,
           7.309448443926298,
           8.014616833378872,
           9.032098084688187,
@@ -1766,7 +1765,8 @@ window.BENCHMARK_DATA = {
           9.80580143057383,
           6.54388976842165,
           9.713619984113253,
-          10.210193548064966
+          10.210193548064966,
+          8.678966947396596
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1842,7 +1842,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          15.40400761961937,
           8.917384281754494,
           14.717228394288282,
           14.43326946405264,
@@ -1891,7 +1890,8 @@ window.BENCHMARK_DATA = {
           14.516431087007126,
           8.489655514558157,
           14.64030282731567,
-          16.35344121058782
+          16.35344121058782,
+          14.251598075032234
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1968,12 +1968,6 @@ window.BENCHMARK_DATA = {
   "Build (Size=8)": {
     "commits": [
       {
-        "sha": "f6700169d471b10566ca9a1ff5d8bfa6a8039590",
-        "author": "Valentin Breu\u00DF",
-        "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
-        "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
-      },
-      {
         "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
@@ -2266,10 +2260,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
         "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
+      },
+      {
+        "sha": "7392f6a7fc44a386afdf13af15adeefdb4982b8d",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
+        "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
       }
     ],
     "labels": [
-      "f6700169",
       "a15aa752",
       "920d5079",
       "67dedfaf",
@@ -2318,14 +2317,14 @@ window.BENCHMARK_DATA = {
       "25c12b4f",
       "e3f54e32",
       "0d542565",
-      "1f582413"
+      "1f582413",
+      "7392f6a7"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          19.20304852525393,
           11.595332758767265,
           14.798503535985947,
           15.49269834458828,
@@ -2374,7 +2373,8 @@ window.BENCHMARK_DATA = {
           16.531011655926704,
           21.84052317738533,
           15.630354762077332,
-          10.732851804296176
+          10.732851804296176,
+          27.525326733078277
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2450,7 +2450,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1550.2178853352864,
           806.4398472125714,
           1305.5273810068766,
           1321.6748751958212,
@@ -2499,7 +2498,8 @@ window.BENCHMARK_DATA = {
           1139.6790691103254,
           1494.0794151306152,
           1174.3671323140463,
-          720.3112782069614
+          720.3112782069614,
+          1753.655414835612
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2575,7 +2575,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          33939.82451520647,
           19100.839313761393,
           26909.049691336495,
           26854.72413736979,
@@ -2624,7 +2623,8 @@ window.BENCHMARK_DATA = {
           25562.579516601563,
           30042.996541341145,
           25368.809422084265,
-          17231.84678548177
+          17231.84678548177,
+          25443.020799909318
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2636,7 +2636,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          32482,
           32477,
           32482,
           32478,
@@ -2685,7 +2684,8 @@ window.BENCHMARK_DATA = {
           32478,
           32482,
           32478,
-          32478
+          32478,
+          32476
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2700,7 +2700,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          737.4715375219073,
           450.19083404541016,
           643.8521984736125,
           585.2461532592773,
@@ -2749,7 +2748,8 @@ window.BENCHMARK_DATA = {
           565.583544031779,
           714.5200277056013,
           599.1916379928589,
-          381.6618014403752
+          381.6618014403752,
+          713.9125383240836
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2825,7 +2825,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11502.42147216797,
           7828.069591522217,
           10763.826880900066,
           9086.844559889574,
@@ -2874,7 +2873,8 @@ window.BENCHMARK_DATA = {
           8728.227014814105,
           11794.975818634033,
           9127.567311604818,
-          6167.829593658447
+          6167.829593658447,
+          12443.468803992639
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2886,7 +2886,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          24761,
           24760,
           24760,
           24760,
@@ -2935,7 +2934,8 @@ window.BENCHMARK_DATA = {
           24761,
           24761,
           24760,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2950,12 +2950,6 @@ window.BENCHMARK_DATA = {
   },
   "Build (Size=256)": {
     "commits": [
-      {
-        "sha": "f6700169d471b10566ca9a1ff5d8bfa6a8039590",
-        "author": "Valentin Breu\u00DF",
-        "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
-        "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
-      },
       {
         "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
         "author": "Valentin Breu\u00DF",
@@ -3249,10 +3243,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
         "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
+      },
+      {
+        "sha": "7392f6a7fc44a386afdf13af15adeefdb4982b8d",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
+        "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
       }
     ],
     "labels": [
-      "f6700169",
       "a15aa752",
       "920d5079",
       "67dedfaf",
@@ -3301,14 +3300,14 @@ window.BENCHMARK_DATA = {
       "25c12b4f",
       "e3f54e32",
       "0d542565",
-      "1f582413"
+      "1f582413",
+      "7392f6a7"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          134.4530368584853,
           85.87624213695526,
           114.31867403643471,
           111.98194597448621,
@@ -3357,7 +3356,8 @@ window.BENCHMARK_DATA = {
           109.22288527659008,
           192.00864906311034,
           111.1582202230181,
-          73.0721077521642
+          73.0721077521642,
+          364.6002065976461
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -3433,7 +3433,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          13327.55557861328,
           7458.828954424177,
           12542.409721374512,
           11116.380784254809,
@@ -3482,7 +3481,8 @@ window.BENCHMARK_DATA = {
           10365.120604451497,
           15496.840397135416,
           10662.155179341635,
-          7103.10112116887
+          7103.10112116887,
+          15767.609397379558
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3558,7 +3558,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          825523.6574358259,
           416680.8427408854,
           649631.9191545759,
           633625.6173177083,
@@ -3607,7 +3606,8 @@ window.BENCHMARK_DATA = {
           621552.8912527902,
           742562.5684344952,
           633059.9933733259,
-          415945.89020647324
+          415945.89020647324,
+          605259.0640345982
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3619,7 +3619,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          741377,
           738983,
           737911,
           719579,
@@ -3668,7 +3667,8 @@ window.BENCHMARK_DATA = {
           740059,
           740450,
           740319,
-          720386
+          720386,
+          739961
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3683,7 +3683,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          43367.90917532785,
           22945.03320719401,
           35070.24412536621,
           37559.61612548828,
@@ -3732,7 +3731,8 @@ window.BENCHMARK_DATA = {
           34854.955467811,
           44771.6337483724,
           35957.258579799105,
-          22425.831917317708
+          22425.831917317708,
+          42449.991529192244
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3744,7 +3744,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
-          79680,
           79051,
           80527,
           80541,
@@ -3793,7 +3792,8 @@ window.BENCHMARK_DATA = {
           80009,
           80009,
           80001,
-          80305
+          80305,
+          81180
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3808,7 +3808,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          344932.99775390624,
           206823.59927133413,
           292208.4222005208,
           298490.7283203125,
@@ -3857,7 +3856,8 @@ window.BENCHMARK_DATA = {
           265795.9797363281,
           355901.13414588344,
           280722.10408528644,
-          185029.9194173177
+          185029.9194173177,
+          351292.91848958336
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3869,7 +3869,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          573108,
           573074,
           573110,
           573026,
@@ -3918,7 +3917,8 @@ window.BENCHMARK_DATA = {
           573059,
           573203,
           573074,
-          573040
+          573040,
+          571195
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3933,12 +3933,6 @@ window.BENCHMARK_DATA = {
   },
   "Realistic": {
     "commits": [
-      {
-        "sha": "f6700169d471b10566ca9a1ff5d8bfa6a8039590",
-        "author": "Valentin Breu\u00DF",
-        "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
-        "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
-      },
       {
         "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
         "author": "Valentin Breu\u00DF",
@@ -4232,10 +4226,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
         "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
+      },
+      {
+        "sha": "7392f6a7fc44a386afdf13af15adeefdb4982b8d",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
+        "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
       }
     ],
     "labels": [
-      "f6700169",
       "a15aa752",
       "920d5079",
       "67dedfaf",
@@ -4284,14 +4283,14 @@ window.BENCHMARK_DATA = {
       "25c12b4f",
       "e3f54e32",
       "0d542565",
-      "1f582413"
+      "1f582413",
+      "7392f6a7"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          252.49475307464598,
           311.3347945213318,
           272.5520525932312,
           231.44976810046606,
@@ -4340,7 +4339,8 @@ window.BENCHMARK_DATA = {
           244.31128461020333,
           251.27400483403886,
           286.62438780466715,
-          301.53457052367077
+          301.53457052367077,
+          231.54093503952026
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -4416,7 +4416,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          623.8396647317069,
           598.488841193063,
           616.0070439118606,
           552.5367317199707,
@@ -4465,7 +4464,8 @@ window.BENCHMARK_DATA = {
           602.7085116068522,
           572.7826052445632,
           616.8113985061646,
-          684.7794905390058
+          684.7794905390058,
+          583.765841117272
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -4541,7 +4541,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          6716.518798828125,
           6393.623248173641,
           6615.940490722656,
           4033.88226369222,
@@ -4590,7 +4589,8 @@ window.BENCHMARK_DATA = {
           6551.773107256208,
           6526.4305828639435,
           7015.630447896322,
-          5319.679785664876
+          5319.679785664876,
+          6454.416036878313
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4666,7 +4666,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          604.050765101115,
           426.13155206044513,
           432.5808914729527,
           361.72668202718097,
@@ -4715,7 +4714,8 @@ window.BENCHMARK_DATA = {
           385.44796439579557,
           391.37754821777344,
           411.61658833821616,
-          435.426789410909
+          435.426789410909,
+          417.9155948956807
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4791,7 +4791,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          751.3157238642375,
           696.904826777322,
           703.0929215113322,
           545.2008819580078,
@@ -4840,7 +4839,8 @@ window.BENCHMARK_DATA = {
           714.054590733846,
           735.8377890904744,
           751.8731012980144,
-          771.1621587753295
+          771.1621587753295,
+          750.470496749878
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
