@@ -1200,6 +1200,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:32:29 2026 \u002B0100",
         "message": "perf: bind the dispatch table\u0027s forwarders as method groups to keep the trim analyzer fast (#276)"
+      },
+      {
+        "sha": "25c12b4f1515471af77d69ee9ca94963e5148b24",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
+        "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
       }
     ],
     "labels": [
@@ -1402,7 +1408,8 @@ window.BENCHMARK_DATA = {
       "02dfe2fe",
       "36756ef2",
       "808136a5",
-      "4aaa3ebf"
+      "4aaa3ebf",
+      "25c12b4f"
     ],
     "datasets": [
       {
@@ -1608,7 +1615,8 @@ window.BENCHMARK_DATA = {
           5.512131631374359,
           6.258720891816275,
           4.221110881865025,
-          7.769033941839423
+          7.769033941839423,
+          7.60893460895334
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1620,6 +1628,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2033,7 +2042,8 @@ window.BENCHMARK_DATA = {
           6.615334737300873,
           7.564080652381692,
           3.9690932144339266,
-          7.76448251839195
+          7.76448251839195,
+          7.504670562346776
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2045,6 +2055,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2458,7 +2469,8 @@ window.BENCHMARK_DATA = {
           84.2172568877538,
           145.0333003447606,
           57.53807532787323,
-          119.30468052228292
+          119.30468052228292,
+          116.95757095019023
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2470,6 +2482,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2879,7 +2892,8 @@ window.BENCHMARK_DATA = {
           6.571638016746594,
           7.6732401723663015,
           5.46014941483736,
-          9.75702491402626
+          9.75702491402626,
+          9.831362144305157
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2891,6 +2905,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3296,7 +3311,8 @@ window.BENCHMARK_DATA = {
           8.81596067349116,
           10.939174892810675,
           6.042097799976667,
-          10.67872095214469
+          10.67872095214469,
+          11.170236507287392
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3308,6 +3324,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4717,6 +4734,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:32:29 2026 \u002B0100",
         "message": "perf: bind the dispatch table\u0027s forwarders as method groups to keep the trim analyzer fast (#276)"
+      },
+      {
+        "sha": "25c12b4f1515471af77d69ee9ca94963e5148b24",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
+        "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
       }
     ],
     "labels": [
@@ -4919,7 +4942,8 @@ window.BENCHMARK_DATA = {
       "02dfe2fe",
       "36756ef2",
       "808136a5",
-      "4aaa3ebf"
+      "4aaa3ebf",
+      "25c12b4f"
     ],
     "datasets": [
       {
@@ -5125,7 +5149,8 @@ window.BENCHMARK_DATA = {
           6.3210582711866925,
           7.2576323539018635,
           4.583554430731705,
-          8.492885713775953
+          8.492885713775953,
+          8.723820370435714
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5137,6 +5162,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5550,7 +5576,8 @@ window.BENCHMARK_DATA = {
           6.484459442396958,
           7.7947013431361745,
           4.142908322491816,
-          7.667722655194146
+          7.667722655194146,
+          7.444825304547946
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5562,6 +5589,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5975,7 +6003,8 @@ window.BENCHMARK_DATA = {
           81.34368291071483,
           143.12616322721755,
           59.42546090909413,
-          124.70340830939156
+          124.70340830939156,
+          109.60562057495117
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5987,6 +6016,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6396,7 +6426,8 @@ window.BENCHMARK_DATA = {
           6.517596201254771,
           7.737891724476447,
           5.263031415641308,
-          9.71657551129659
+          9.71657551129659,
+          9.80580143057383
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6408,6 +6439,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6813,7 +6845,8 @@ window.BENCHMARK_DATA = {
           8.7078672905763,
           13.199643049637476,
           7.766098361214002,
-          14.120663680632909
+          14.120663680632909,
+          14.516431087007126
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6825,6 +6858,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8234,6 +8268,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:32:29 2026 \u002B0100",
         "message": "perf: bind the dispatch table\u0027s forwarders as method groups to keep the trim analyzer fast (#276)"
+      },
+      {
+        "sha": "25c12b4f1515471af77d69ee9ca94963e5148b24",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
+        "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
       }
     ],
     "labels": [
@@ -8436,7 +8476,8 @@ window.BENCHMARK_DATA = {
       "02dfe2fe",
       "36756ef2",
       "808136a5",
-      "4aaa3ebf"
+      "4aaa3ebf",
+      "25c12b4f"
     ],
     "datasets": [
       {
@@ -8642,7 +8683,8 @@ window.BENCHMARK_DATA = {
           15.060241228342056,
           10.813336339592933,
           15.079138308763504,
-          27.589746057987213
+          27.589746057987213,
+          16.531011655926704
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8804,6 +8846,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9067,7 +9110,8 @@ window.BENCHMARK_DATA = {
           1018.6731882095337,
           802.0788377761841,
           1098.3237799130952,
-          1852.339037068685
+          1852.339037068685,
+          1139.6790691103254
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9079,6 +9123,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9492,7 +9537,8 @@ window.BENCHMARK_DATA = {
           17719.775435384116,
           17677.889066256008,
           25180.729125976562,
-          25382.609189860024
+          25382.609189860024,
+          25562.579516601563
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9703,7 +9749,8 @@ window.BENCHMARK_DATA = {
           32474,
           32476,
           32478,
-          32476
+          32476,
+          32478
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9913,7 +9960,8 @@ window.BENCHMARK_DATA = {
           467.08490614096326,
           386.71909405634955,
           569.6685842514038,
-          719.3910491943359
+          719.3910491943359,
+          565.583544031779
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9943,6 +9991,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10330,7 +10379,8 @@ window.BENCHMARK_DATA = {
           7593.3054574330645,
           6586.469537353516,
           8631.97853415353,
-          13451.928114754814
+          13451.928114754814,
+          8728.227014814105
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10537,7 +10587,8 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
-          24760
+          24760,
+          24761
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11751,6 +11802,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:32:29 2026 \u002B0100",
         "message": "perf: bind the dispatch table\u0027s forwarders as method groups to keep the trim analyzer fast (#276)"
+      },
+      {
+        "sha": "25c12b4f1515471af77d69ee9ca94963e5148b24",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
+        "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
       }
     ],
     "labels": [
@@ -11953,7 +12010,8 @@ window.BENCHMARK_DATA = {
       "02dfe2fe",
       "36756ef2",
       "808136a5",
-      "4aaa3ebf"
+      "4aaa3ebf",
+      "25c12b4f"
     ],
     "datasets": [
       {
@@ -12159,7 +12217,8 @@ window.BENCHMARK_DATA = {
           167.03894913991292,
           74.98039690937314,
           110.4418732325236,
-          331.91127087275186
+          331.91127087275186,
+          109.22288527659008
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12321,6 +12380,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12584,7 +12644,8 @@ window.BENCHMARK_DATA = {
           8636.87145451137,
           7396.538390023367,
           10220.738894144693,
-          16077.633976236979
+          16077.633976236979,
+          10365.120604451497
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12596,6 +12657,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13009,7 +13071,8 @@ window.BENCHMARK_DATA = {
           398596.9561523438,
           413878.8464518229,
           618765.2409855769,
-          611270.2755998884
+          611270.2755998884,
+          621552.8912527902
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13220,7 +13283,8 @@ window.BENCHMARK_DATA = {
           738694,
           718408,
           740080,
-          738499
+          738499,
+          740059
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13430,7 +13494,8 @@ window.BENCHMARK_DATA = {
           25861.432836914064,
           23253.86467566857,
           34473.41499110631,
-          44218.84289550781
+          44218.84289550781,
+          34854.955467811
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13637,7 +13702,8 @@ window.BENCHMARK_DATA = {
           79986,
           80350,
           80009,
-          80270
+          80270,
+          80009
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13847,7 +13913,8 @@ window.BENCHMARK_DATA = {
           228031.24091796874,
           190356.49312918526,
           258663.45348307292,
-          377826.5760216346
+          377826.5760216346,
+          265795.9797363281
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14054,7 +14121,8 @@ window.BENCHMARK_DATA = {
           571214,
           573120,
           573089,
-          572327
+          572327,
+          573059
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15244,6 +15312,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:32:29 2026 \u002B0100",
         "message": "perf: bind the dispatch table\u0027s forwarders as method groups to keep the trim analyzer fast (#276)"
+      },
+      {
+        "sha": "25c12b4f1515471af77d69ee9ca94963e5148b24",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
+        "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
       }
     ],
     "labels": [
@@ -15442,7 +15516,8 @@ window.BENCHMARK_DATA = {
       "02dfe2fe",
       "36756ef2",
       "808136a5",
-      "4aaa3ebf"
+      "4aaa3ebf",
+      "25c12b4f"
     ],
     "datasets": [
       {
@@ -15644,7 +15719,8 @@ window.BENCHMARK_DATA = {
           206.77925304266122,
           252.62564863477434,
           260.8456418355306,
-          268.7132699966431
+          268.7132699966431,
+          244.31128461020333
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -15679,6 +15755,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16061,7 +16138,8 @@ window.BENCHMARK_DATA = {
           472.01354698034436,
           454.65825172833036,
           613.2390531812396,
-          614.6337416966757
+          614.6337416966757,
+          602.7085116068522
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16073,6 +16151,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -16478,7 +16557,8 @@ window.BENCHMARK_DATA = {
           5034.404929024832,
           4780.296831003825,
           6617.670308249338,
-          4762.533066558838
+          4762.533066558838,
+          6551.773107256208
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -16562,6 +16642,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -16895,7 +16976,8 @@ window.BENCHMARK_DATA = {
           356.64506600697837,
           326.88944840431213,
           391.92014764149985,
-          394.7113081773122
+          394.7113081773122,
+          385.44796439579557
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -16907,6 +16989,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -17312,7 +17395,8 @@ window.BENCHMARK_DATA = {
           584.0600894047664,
           515.8929798762003,
           732.1082817224355,
-          697.0866574605305
+          697.0866574605305,
+          714.054590733846
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17324,6 +17408,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
