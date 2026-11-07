@@ -122,6 +122,73 @@ public class ModuleHiddenServiceTests
 			.Because("a consumer builds an eager singleton at startup even though nothing depends on it");
 	}
 
+	public class StartedSingletons
+	{
+		private static string Library(string registration, bool partial = true, bool grant = false) => $$"""
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"Friend\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IClock { }
+			public sealed class Clock : IClock { }
+			internal interface IStartable { Task StartAsync(); }
+			internal sealed class Warmer : IStartable { public Task StartAsync() => Task.CompletedTask; }
+
+			[Module]
+			[AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]
+			{{registration}}
+			[Singleton<Clock, IClock>]
+			public static {{(partial ? "partial " : "")}}class CoffeeModule { }
+			""";
+
+		[Test]
+		[Arguments("[Singleton<Warmer>(Eager = true)]")]
+		[Arguments("[Singleton<Warmer>]")]
+		public async Task InternalSingletonAConsumerStarts_GetsAHandleInAModuleWithNothingElseToGenerate(string registration)
+		{
+			GeneratorResult result = RunLibrary(Library(registration));
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result)).Contains(HiddenFactory("global::Lib.Warmer"))
+				.Because("a consumer builds an eager or async-initialized singleton though nothing depends on it, so the module needs its handle even without any other generated member");
+		}
+
+		[Test]
+		[Arguments("[Singleton<Warmer>(Eager = true)]", "eager")]
+		[Arguments("[Singleton<Warmer>]", "async-initialized")]
+		public async Task InternalSingletonAConsumerStarts_InAModuleThatIsNotPartial_ReportsAwt194(string registration, string kind)
+		{
+			GeneratorResult result = RunLibrary(Library(registration, partial: false));
+
+			await That(result.Diagnostics).Contains($"*AWT194*'Lib.CoffeeModule' registers the {kind} internal singleton 'Lib.Warmer'*not partial*").AsWildcard()
+				.Because("a module that cannot receive the handle would let a container in another assembly drop the singleton silently");
+		}
+
+		[Test]
+		public async Task InternalSingletonAConsumerStarts_InAModuleThatIsNotPartialUnderAGrant_ReportsAwt231InAConsumerWithoutIt()
+		{
+			string library = Library("[Singleton<Warmer>(Eager = true)]", partial: false, grant: true);
+
+			await That(RunLibrary(library).Diagnostics).IsEmpty()
+				.Because("an assembly granted InternalsVisibleTo constructs the singleton itself");
+			await That(Generator.RunWithGeneratedReferencedAssembly(library, Consumer.Container).Diagnostics)
+				.Contains("*AWT231*'Lib.CoffeeModule' registers 'Lib.Warmer'*no handle for it because the module, or a class that contains it, is not partial*").AsWildcard()
+				.Because("a container that can neither name nor construct the singleton reports it instead of silently never building it");
+		}
+
+		[Test]
+		public async Task InternalSingletonNothingStarts_InAModuleThatIsNotPartial_DoesNotReportAwt194()
+		{
+			GeneratorResult result = RunLibrary(Library("[Transient<Warmer>]", partial: false));
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("nothing a consumer reaches needs the internal service, so the module needs no handle and no partial modifier");
+		}
+	}
+
 	[Test]
 	public async Task DisposableImplementation_IsWrappedInTheMatchingVariant()
 	{

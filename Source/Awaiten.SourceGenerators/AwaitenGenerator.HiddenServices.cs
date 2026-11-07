@@ -383,7 +383,7 @@ partial class AwaitenGenerator
 			.Where(candidate => candidate.Viable
 			                    && (hidden.SeveralModules
 			                        || candidate.Registrations.Any(registration => !IsHiddenService(registration.Service, module, compilation))
-			                        || (candidate.Registrations[0].Attribute.AttributeClass?.Name == "SingletonAttribute" && (candidate.Registrations.Any(registration => NamedFlag(registration.Attribute, "Eager")) || IsAsyncInitialized(candidate)))))
+			                        || (candidate.Registrations[0].Attribute.AttributeClass?.Name == "SingletonAttribute" && (candidate.Registrations.Any(registration => NamedFlag(registration.Attribute, "Eager")) || IsHiddenAsyncInitialized(candidate.Implementation, candidate.Registrations, module, compilation, conventions)))))
 			.ToList();
 
 		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden);
@@ -462,11 +462,56 @@ partial class AwaitenGenerator
 		}
 
 		return (factories, handles, aliases, initializers);
+	}
 
-		bool IsAsyncInitialized(HiddenImplementation candidate)
-			=> MatchingAsyncInitializers(conventions, candidate.Implementation, convention => IsOfConventionType(candidate.Implementation, convention.Type)).Count > 0
-			   || candidate.Registrations.Any(registration => NamedArgument(registration.Attribute, "OnActivated") is { } hook
-			                                                  && AccessibleMembers(module, hook, compilation).OfType<IMethodSymbol>().Any(method => IsAsyncHookReturn(method.ReturnType, compilation)));
+	/// <summary>
+	///     Whether a convention of the module initializes <paramref name="implementation" />, or one of its
+	///     <paramref name="registrations" /> names an asynchronous <c>OnActivated</c> hook, so a container initializes
+	///     a singleton of it though nothing depends on it.
+	/// </summary>
+	private static bool IsHiddenAsyncInitialized(
+		INamedTypeSymbol implementation,
+		IEnumerable<ModuleRegistration> registrations,
+		INamedTypeSymbol module,
+		Compilation compilation,
+		List<AsyncInitializerConvention> conventions)
+		=> MatchingAsyncInitializers(conventions, implementation, convention => IsOfConventionType(implementation, convention.Type)).Count > 0
+		   || registrations.Any(registration => NamedArgument(registration.Attribute, "OnActivated") is { } hook
+		                                        && AccessibleMembers(module, hook, compilation).OfType<IMethodSymbol>().Any(method => IsAsyncHookReturn(method.ReturnType, compilation)));
+
+	/// <summary>
+	///     The first singleton a module another assembly can name registers under an internal service that a container
+	///     builds or initializes though nothing depends on it, because it is eager or async-initialized, and whether it
+	///     is eager, or <see langword="null" />. The module needs its handle even without any other generated member.
+	/// </summary>
+	private static (ModuleRegistration Registration, bool Eager)? StartedHiddenSingleton(INamedTypeSymbol module, Compilation compilation)
+	{
+		if (!IsExternallyAccessible(module))
+		{
+			return null;
+		}
+
+		List<AsyncInitializerConvention>? conventions = null;
+		foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation, members: true))
+		{
+			if (registration.Attribute.AttributeClass?.Name != "SingletonAttribute" || !IsHiddenService(registration.Service, module, compilation))
+			{
+				continue;
+			}
+
+			if (NamedFlag(registration.Attribute, "Eager"))
+			{
+				return (registration, true);
+			}
+
+			conventions ??= DeclaredAsyncInitializers(module, compilation, null);
+			if (IsHiddenAsyncInitialized(registration.Implementation, [registration,], module, compilation, conventions))
+			{
+				return (registration, false);
+			}
+		}
+
+		return null;
 	}
 
 	/// <summary>

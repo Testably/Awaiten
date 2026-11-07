@@ -505,3 +505,30 @@ internal sealed class HiddenJournalReader(IHiddenJournal journal) : IHiddenJourn
 [Singleton<HiddenJournalReader, IHiddenJournalReader>]
 [Decorate<TracedJournal, IHiddenJournal>]
 public static partial class CrossAssemblyHiddenDecoratedAliasModule;
+/// <summary>Counts the constructions of the internal eager singleton of <see cref="CrossAssemblyStartedSingletonModule" />.</summary>
+public static class StartedSingletonCounter
+{
+	private static int _constructed;
+
+	/// <summary>How often the internal eager singleton was constructed.</summary>
+	public static int Constructed => Volatile.Read(ref _constructed);
+
+	internal static void Increment() => Interlocked.Increment(ref _constructed);
+}
+
+/// <summary>A public clock, which a container in any assembly constructs itself.</summary>
+public interface IStartedClock;
+
+/// <summary>A public implementation of <see cref="IStartedClock" />.</summary>
+public sealed class StartedClock : IStartedClock;
+
+internal sealed class StartedProbe
+{
+	public StartedProbe() => StartedSingletonCounter.Increment();
+}
+
+/// <summary>A <c>[Module]</c> whose only internal registration is an eager singleton nothing depends on.</summary>
+[Module]
+[Singleton<StartedProbe>(Eager = true)]
+[Singleton<StartedClock, IStartedClock>]
+public static partial class CrossAssemblyStartedSingletonModule;

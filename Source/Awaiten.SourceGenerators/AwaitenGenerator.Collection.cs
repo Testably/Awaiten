@@ -380,14 +380,26 @@ partial class AwaitenGenerator
 		Compilation compilation = context.Compilation;
 		if (registration.ServiceSymbol is not { } service || !SelfCompilesRegistration(module, implementation, service, compilation))
 		{
-			return !sameCompilation
-			       && !context.Inherited
-			       && registration.ServiceSymbol is { } inaccessible
-			       && !compilation.IsSymbolAccessibleWithin(inaccessible, compilation.Assembly)
-			       && implementation is { TypeKind: TypeKind.Class, IsAbstract: false, }
-			       && !CanConstruct(implementation, compilation)
-				? null
-				: registration;
+			if (!sameCompilation
+			    && !context.Inherited
+			    && registration.ServiceSymbol is { } inaccessible
+			    && !compilation.IsSymbolAccessibleWithin(inaccessible, compilation.Assembly)
+			    && implementation is { TypeKind: TypeKind.Class, IsAbstract: false, }
+			    && !CanConstruct(implementation, compilation))
+			{
+				if (registration.Lifetime == Lifetime.Singleton
+				    && (registration.Eager || TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)).AsyncInitializers.Count > 0))
+				{
+					ReportNotSelfCompiled(
+						context, module, implementation, "handle",
+						ModuleShapeReason(module) ?? "it leaves the singleton to the assemblies it grants InternalsVisibleTo",
+						$"make '{Display(registration.ImplementationType)}' and the service it is registered under public");
+				}
+
+				return null;
+			}
+
+			return registration;
 		}
 
 		if (sameCompilation && IsHiddenInModule(implementation, module, compilation))

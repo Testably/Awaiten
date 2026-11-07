@@ -142,7 +142,7 @@ The container treats the internal service like one it constructs itself:
 - A singleton is shared by all its dependents, a scoped service is built once per scope, and a transient once per dependency.
 - The container disposes the instance, synchronously or asynchronously, as the implementation implements it. `SuppressDisposal` works as usual.
 - `OnActivated` and `OnRelease` hooks run through generated wrappers, and so do the module's [async initializer conventions](../03-core-concepts/03-async-initialization.md#which-conventions-apply). The hooks and conventions may stay internal.
-- An internal service may depend on other internal services of the module, and an `Eager` or async-initialized internal singleton is built even when nothing public depends on it.
+- An internal service may depend on other internal services of the module, and an `Eager` or async-initialized internal singleton is built even when nothing public depends on it. A module that isn't `partial` can't generate its handle and is reported ([AWT194](../09-diagnostics.md#awt194)). When its assembly grants `InternalsVisibleTo`, the library build leaves the singleton to those assemblies instead, and any other container reports that it can't build it ([AWT231](../09-diagnostics.md#awt231)).
 
 A dependent may take the internal service directly or as `Func<T>`, `Lazy<T>`, `Owned<T>`, `Func<Owned<T>>` or a collection of `T`. Any other shape, such as `Task<T>`, is an error ([AWT237](../09-diagnostics.md#awt237)).
 

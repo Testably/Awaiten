@@ -267,6 +267,16 @@ public class ModuleHiddenServiceTests
 		await That(HiddenEagerCounter.Constructed).IsGreaterThan(before)
 			.Because("an eager internal singleton is built at startup through its handle, though nothing depends on it");
 	}
+
+	[Test]
+	public async Task EagerInternalSingletonOfAModuleWithNothingElseToGenerate_IsBuiltWithTheContainer()
+	{
+		int before = StartedSingletonCounter.Constructed;
+		using StartedSingletonContainer.Root container = new();
+
+		await That(StartedSingletonCounter.Constructed).IsGreaterThan(before)
+			.Because("the module generates the handle of its eager internal singleton though it has no other generated member");
+	}
 }
 
 [Container]
@@ -284,3 +294,7 @@ public static partial class HiddenDecoratorContainer;
 [Container]
 [Import(typeof(CrossAssemblyHiddenDecoratedAliasModule))]
 public static partial class HiddenDecoratedAliasContainer;
+
+[Container]
+[Import(typeof(CrossAssemblyStartedSingletonModule))]
+public static partial class StartedSingletonContainer;

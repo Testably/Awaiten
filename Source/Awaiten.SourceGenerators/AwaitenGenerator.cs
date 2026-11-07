@@ -82,8 +82,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> or a
-	///     self-compiled registration (see <see cref="SelfCompilesRegistration" />), returning
+	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c>, a
+	///     self-compiled registration (see <see cref="SelfCompilesRegistration" />), an eager or async-initialized
+	///     singleton under an internal type (see <see cref="StartedHiddenSingleton" />), or other generated members, returning
 	///     <see langword="null" /> for any other module, which self-compiles nothing. The module must be
 	///     non-generic (AWT201) and <c>partial</c>, as must every type enclosing a nested module, to receive the
 	///     generated factories and registration attributes (AWT194), unless it declares no <c>[Scan]</c> and its
@@ -116,6 +117,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
 		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
+		(ModuleRegistration Registration, bool Eager)? started = declaresScan || selfCompiled is not null ? null : StartedHiddenSingleton(moduleSymbol, compilation);
 
 		// Member wrappers and the factories of decorators are generated only into a module that can receive them, so a
 		// module that cannot keeps building without them, as it did before they existed.
@@ -124,7 +126,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation, diagnostics, skipped) : new();
 		HiddenServices? hidden = receives ? CollectHiddenServices(moduleSymbol, compilation) : null;
 		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation, hidden) : new();
-		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0
+		if (!declaresScan && selfCompiled is null && started is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0
 		    && hidden is not { SeveralModules: true, Implementations.Count: > 0, })
 		{
 			return diagnostics.Count == 0
@@ -133,11 +135,15 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// Under a grant a registration-only module builds anyway, so the message says why a scan module does not.
-		string reason = selfCompiled is null
-			? GrantsInternalsVisibleTo(compilation.Assembly)
+		string reason = (selfCompiled, started) switch
+		{
+			({ } registration, _) => $"registers '{Display(registration.Implementation.ToDisplayString(FullyQualified))}', which another assembly cannot construct,",
+			(null, { Eager: true, } singleton) => $"registers the eager internal singleton '{Display(singleton.Registration.Implementation.ToDisplayString(FullyQualified))}', which a container in another assembly builds through a generated handle,",
+			(null, { } singleton) => $"registers the async-initialized internal singleton '{Display(singleton.Registration.Implementation.ToDisplayString(FullyQualified))}', which a container in another assembly initializes through a generated handle,",
+			_ => GrantsInternalsVisibleTo(compilation.Assembly)
 				? "declares a [Scan], whose matches a consumer reads from generated metadata even when the assembly grants InternalsVisibleTo,"
-				: "declares a [Scan]"
-			: $"registers '{Display(selfCompiled.Implementation.ToDisplayString(FullyQualified))}', which another assembly cannot construct,";
+				: "declares a [Scan]",
+		};
 
 		// The module must be partial for the generator to add the factories and registration attributes. Every part
 		// of a partial type carries the partial modifier, so the declaration bearing the [Module] attribute suffices.
@@ -154,7 +160,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<HiddenInitializer> initializers = new();
 		bool expanded = false;
 		string? notPartialMarker = null;
-		if (selfCompiled is not null && moduleSymbol.IsStatic && (HasOpenTypeParameters(moduleSymbol) || !isPartial) && FriendsConstructEveryRegistration(moduleSymbol, compilation))
+		if ((selfCompiled is not null || started is not null) && moduleSymbol.IsStatic && (HasOpenTypeParameters(moduleSymbol) || !isPartial) && FriendsConstructEveryRegistration(moduleSymbol, compilation))
 		{
 			// A registration-only module that cannot receive the factories leaves construction to the assemblies granted
 			// InternalsVisibleTo, as before modules generated factories. A consumer sees a generic module from metadata,
