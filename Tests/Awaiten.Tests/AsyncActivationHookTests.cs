@@ -98,7 +98,7 @@ public sealed partial class AsyncActivationHookTests
 
 		await That(() => shop.Resolve<ITerminal>()).Throws<InvalidOperationException>().WithMessage("*ResolveAsync*").AsWildcard()
 			.Because("the asynchronous hook makes the terminal async-initialized, so a synchronous resolve would hand out an unconnected terminal");
-		await That(shop.GetResolvability(typeof(ITerminal)).Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly);
+		await That(shop.GetResolvability<ITerminal>().Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly);
 	}
 
 	[Test]
