@@ -171,6 +171,8 @@ Prefer explicit registrations. A scan trades away the property that makes the co
 
 A `[Scan]` may also sit on a `[Module]`, where it is compiled in the module's own build so a library can scan its `internal` implementations and expose them to consumers through their interfaces. See [self-compiled scans](./07-modules.md#self-compiled-scans).
 
+A match of a module scan shares one instance with every other registration or scan match of the same implementation, in any assembly that imports the module. See [shared instances](./07-modules.md#shared-instances).
+
 `OnActivated` and `OnRelease` work on a module scan too, and the hook method may stay `internal` alongside the implementation. The module resolves the hook (closing a generic one over the match's marker) in its own build and emits a small `public` wrapper next to each factory, so a consumer runs the hook without ever naming the internal method or type. Only the hook's parameters *after* the instance carry a rule the container form does not: they are resolved from the consuming container's graph, so each type has to be nameable outside the module's assembly, the same requirement a scanned constructor parameter gets. An inaccessible hook dependency is [AWT203](../09-diagnostics.md#awt203), and one marked `[FromKey]` or `[Inject]` is [AWT204](../09-diagnostics.md#awt204), since the wrapper's bare signature cannot carry the attribute across the boundary.
 
 ## Where to go next

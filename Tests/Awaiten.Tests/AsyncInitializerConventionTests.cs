@@ -241,6 +241,18 @@ public sealed partial class AsyncInitializerConventionTests
 	}
 
 	[Test]
+	public async Task AMethodTwoConventionsOfAModuleInAnotherAssemblyReach_RunsOnce()
+	{
+		using SupportSharedMethodShop.Root shop = new();
+
+		ISharedMethodDevice device = await shop.ResolveAsync<ISharedMethodDevice>();
+
+		await That(device.Starts).IsEqualTo(1)
+			.Because("the module records the conventions it selected with their methods, so the consumer does not run the shared method again through the second convention");
+		await That(device.Calibrations).IsEqualTo(1);
+	}
+
+	[Test]
 	public async Task AnInternalConventionOfAFriendModule_IsRunByTheFriend()
 	{
 		using CancellationTokenSource cancellation = new();
@@ -424,4 +436,8 @@ public sealed partial class AsyncInitializerConventionTests
 	[Container]
 	[Import(typeof(ConventionShapeModule))]
 	public static partial class ShapeShop;
+
+	[Container]
+	[Import(typeof(SharedMethodConventionModule))]
+	public static partial class SupportSharedMethodShop;
 }

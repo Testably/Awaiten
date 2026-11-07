@@ -152,6 +152,26 @@ The expansion also stamps the module with a generated marker, present even when 
 
 When the module lives in the **same assembly as the container**, there is no assembly boundary to bridge, and the container expands the module's `[Scan]` directly. The scan still means exactly what it means across assemblies: one accessible exposure per match, the same v1 limitations, and construction through the same constructor the generated factory would mirror, so moving a module between the container's project and a library never changes what its scan registers. A match skipped in the module's build (AWT196) stays skipped here too. The only difference is mechanical: the container constructs the match directly instead of calling the generated factory, which it cannot see within its own compilation, except for a match private to the module or a class that contains it, which it builds through the factory the module generates in the same build. The self-compiled factories are still generated into the module, so the same module keeps working for any *other* assembly that imports it.
 
+### Shared instances
+
+A match shares one instance with every other registration or scan match of the same implementation, in any assembly. This holds when the module registers the implementation through a `Factory`, when another module, the container or the base of an [extended container](./08-extending-containers.md) registers it, and when the scans of two modules match it. Each generated registration names its implementation, so a container in another assembly builds the instance once, through the registration that wins, and the match joins it.
+
+```csharp
+public interface IAppliance;
+public interface IBoiler;
+internal sealed class Boiler : IAppliance, IBoiler;
+
+[Module]
+[Singleton<Boiler, IBoiler>]
+public static partial class BoilerModule;
+
+[Module]
+[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+public static partial class ApplianceModule;   // a container that imports both shares one Boiler
+```
+
+The shared instance has the type the winning registration produces. Here that is `IBoiler`, the type the registration's factory returns, which doesn't convert to `IAppliance`. A container that can construct the implementation, because it is public or the library grants the container's assembly `InternalsVisibleTo`, then constructs it once for the registration and the match. Any other container reports [AWT240](../09-diagnostics.md#awt240) and drops the match, because the match's factory would build a second instance.
+
 ## One level deep
 
 Imports are not transitive. A module's own `[Import]` is not followed. Keep the container as the single place that composes modules. (A module's own `[Scan]`, by contrast, does reach the importing container: expanded directly by the container for a same-assembly module, or self-compiled in the module's build across assemblies, see above.)

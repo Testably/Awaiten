@@ -23,7 +23,7 @@ public partial class DiagnosticTests
 			                                       public static partial class TerminalModule;
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT234*Terminal*IStartable.StartAsync*not accessible outside the module's assembly*").AsWildcard()
+			await That(result.Diagnostics).Contains("*AWT234: 'Lib.Terminal', self-compiled from a module registration, is initialized by the async initializer 'Lib.IStartable.StartAsync', but 'Lib.IStartable' is not accessible outside the module's assembly*").AsWildcard()
 				.Because("a consumer in another assembly runs the convention through its type, which it cannot name");
 		}
 
@@ -47,7 +47,7 @@ public partial class DiagnosticTests
 			                                       public static partial class PrinterModule;
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT234*Printer*Machine.StartAsync*the method is not accessible outside the module's assembly*").AsWildcard()
+			await That(result.Diagnostics).Contains("*AWT234: 'Lib.Printer', matched by the module scan, is initialized by the async initializer 'Lib.Machine.StartAsync', but the method is not accessible outside the module's assembly*").AsWildcard()
 				.Because("a consumer in another assembly calls the convention's method itself, so it must be public");
 		}
 

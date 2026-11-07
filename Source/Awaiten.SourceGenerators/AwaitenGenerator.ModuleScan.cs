@@ -326,7 +326,8 @@ partial class AwaitenGenerator
 				onActivated?.Wrapper,
 				onRelease?.Wrapper,
 				TraitsOf(type, DeclaredAsyncInitializers(context.Module, context.Compilation, null)),
-				skipReason is null ? null : SkipOf(type, skipReason, distinct)),
+				skipReason is null ? null : SkipOf(type, skipReason, distinct),
+				MetadataNameOf(type)),
 			service,
 			type,
 			match.Location,
@@ -1089,16 +1090,17 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     How a self-compilation diagnostic names the implementation it is about: its fully-qualified
 	///     <see cref="TypeName" />, the <see cref="Subject" /> phrase a message opens with, and the
-	///     <see cref="Remedy" /> that keeps the implementation out of self-compilation.
+	///     <see cref="Remedy" /> that keeps the implementation out of self-compilation. <see cref="Participle" /> describes
+	///     the implementation in a clause after its name, for a message that goes on to say what it is.
 	/// </summary>
-	private readonly record struct SelfCompiledSubject(string TypeName, string Subject, string Remedy);
+	private readonly record struct SelfCompiledSubject(string TypeName, string Subject, string Remedy, string? Participle = null);
 
 	/// <summary>The remedy of AWT197 for a scan match exposed under several interfaces.</summary>
 	private const string ScanSingleExposureRemedy = "narrow the As to one interface or exclude the type from the scan";
 
 	/// <summary>The subject of a self-compilation diagnostic about a module <c>[Scan]</c> match.</summary>
 	private static SelfCompiledSubject ScanSubject(string typeName)
-		=> new(typeName, $"'{Display(typeName)}' matched the module scan", "exclude the type from the scan");
+		=> new(typeName, $"'{Display(typeName)}' matched the module scan", "exclude the type from the scan", "matched by the module scan");
 
 	/// <summary>
 	///     The <c>[Inject]</c>, <c>[Arg]</c> or <c>[FromKey]</c> attribute on a constructor parameter that a
@@ -1126,14 +1128,12 @@ partial class AwaitenGenerator
 	private static ImplementationTraits TraitsOf(INamedTypeSymbol type, IEnumerable<AsyncInitializerConvention> conventions)
 	{
 		bool Implements(string name) => type.AllInterfaces.Any(contract => contract.ToDisplayString(FullyQualified) == name);
-		string[] initializers = MatchingAsyncInitializers(conventions, type, convention => IsOfConventionType(type, convention))
-			.Select(convention => convention.Type.ToDisplayString(FullyQualified))
-			.Distinct()
-			.ToArray();
+		List<AsyncInitializerConvention> initializers = MatchingAsyncInitializers(conventions, type, convention => IsOfConventionType(type, convention.Type));
 		return new ImplementationTraits(
-			new EquatableArray<string>(initializers),
+			new EquatableArray<string>(initializers.Select(convention => convention.Type.ToDisplayString(FullyQualified)).ToArray()),
 			Implements("global::System.IDisposable"),
-			Implements("global::System.IAsyncDisposable"));
+			Implements("global::System.IAsyncDisposable"),
+			new EquatableArray<string>(initializers.Select(convention => convention.Method.Name).ToArray()));
 	}
 
 	/// <summary>

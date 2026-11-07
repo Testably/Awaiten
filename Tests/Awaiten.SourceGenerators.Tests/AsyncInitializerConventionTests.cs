@@ -646,6 +646,56 @@ public class AsyncInitializerConventionTests
 		}
 
 		[Test]
+		public async Task AMethodTwoConventionsReach_RunsOnceBehindAGeneratedFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+				using System.Threading.Tasks;
+
+				namespace Lib;
+
+				public interface IStartable { Task StartAsync(); }
+				public interface IPowered { Task StartAsync(); Task CalibrateAsync(); }
+				public interface ITerminal { }
+				internal sealed class Terminal : ITerminal, IStartable, IPowered
+				{
+				    public Task StartAsync() => Task.CompletedTask;
+				    public Task CalibrateAsync() => Task.CompletedTask;
+				}
+				public interface IPlugin { }
+				public interface IPrinter { }
+				internal sealed class Printer : IPlugin, IPrinter, IStartable, IPowered
+				{
+				    public Task StartAsync() => Task.CompletedTask;
+				    public Task CalibrateAsync() => Task.CompletedTask;
+				}
+
+				[Module]
+				[AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]
+				[AsyncInitializer<IPowered>(nameof(IPowered.StartAsync))]
+				[AsyncInitializer<IPowered>(nameof(IPowered.CalibrateAsync))]
+				[Singleton<Terminal, ITerminal>]
+				[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
+				public static partial class TerminalModule;
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(TerminalModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("StartAsync()").Exactly(2)
+				.Because("one method implements IStartable.StartAsync and IPowered.StartAsync, so it runs once on the terminal and once on the printer, although IPowered also brings CalibrateAsync");
+			await That(source).Contains("((global::Lib.IPowered)created).CalibrateAsync()").Exactly(2);
+		}
+
+		[Test]
 		public async Task AModuleConvention_InitializesADecoratorAndACompositeBuiltThroughGeneratedFactories()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""

@@ -236,10 +236,12 @@ internal static partial class Sources
 		// What the consumer cannot read off the match it never sees: async initialization and disposal.
 		string asyncInitializable = factory.Traits.AsyncInitializers.Count > 0
 			? $", AsyncInitializers = new global::System.Type[] {{ {string.Join(", ", factory.Traits.AsyncInitializers.Select(type => $"typeof({type})"))} }}"
+			  + $", AsyncInitializerMethods = new string[] {{ {string.Join(", ", factory.Traits.AsyncInitializerMethods.Select(method => $"\"{method}\""))} }}"
 			: string.Empty;
 		string disposable = factory.Traits.Disposable ? ", Disposable = true" : string.Empty;
 		string asyncDisposable = factory.Traits.AsyncDisposable ? ", AsyncDisposable = true" : string.Empty;
-		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{RelativeName(factory.FactoryName, factory.Skip is null)}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable})";
+		string implementation = factory is { Skip: null, ImplementationMetadataName: { } name, } ? $", Implementation = \"{name}\"" : string.Empty;
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{RelativeName(factory.FactoryName, factory.Skip is null)}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable}{implementation})";
 	}
 
 	/// <summary>

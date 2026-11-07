@@ -781,7 +781,7 @@ partial class AwaitenGenerator
 
 	/// <summary>The subject of a self-compilation diagnostic about a module registration.</summary>
 	private static SelfCompiledSubject RegistrationSubject(string typeName)
-		=> new(typeName, $"'{Display(typeName)}' is self-compiled from a module registration", "make the implementation and its constructor public");
+		=> new(typeName, $"'{Display(typeName)}' is self-compiled from a module registration", "make the implementation and its constructor public", "self-compiled from a module registration");
 
 	/// <summary>
 	///     A deterministic name for the factory of a self-compiled registration, derived from the implementation's

@@ -25,6 +25,8 @@ namespace Awaiten.SourceGenerators;
 ///     <c>ConstructVia</c> names the generated factory of the module or base container that builds an implementation
 ///     the container cannot construct, and <c>Constructor</c> the constructor that factory mirrors when it is fixed
 ///     (a base container's factory mirrors the constructor the base picked).
+///     <c>ScanImplementation</c> is the implementation a module's generated scan factory in another assembly builds,
+///     which lets the container share one instance with every other registration of it (see <c>ShareScannedInstances</c>).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -61,7 +63,8 @@ internal sealed record RawRegistration(
 	bool TraitsExact = false,
 	string? ConstructVia = null,
 	string? ConstructViaType = null,
-	IMethodSymbol? Constructor = null);
+	IMethodSymbol? Constructor = null,
+	INamedTypeSymbol? ScanImplementation = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that

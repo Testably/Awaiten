@@ -2260,6 +2260,35 @@ public static partial class CoffeeShop
 
 **Fix:** Rename the member.
 
+### AWT240
+
+:::danger[Error]
+A module's scan matches an implementation that another registration or scan match of the container names too, but the container can't share one instance between them, so it drops the match.
+:::
+
+A match of a module scan and every other registration of the same implementation [share one instance](./04-registration/07-modules.md#shared-instances). The container builds that instance through the registration that wins, as the type it produces. When the match's interface doesn't convert from that type, and the container can't construct the implementation itself, the match's generated factory would build a second instance. So the container reports this error at its `[Import]` and leaves the match out.
+
+```csharp no-compile
+// In a referenced library, which does not grant the application InternalsVisibleTo:
+internal sealed class Boiler : IAppliance, IBoiler;
+
+[Module]
+[Singleton<Boiler, IBoiler>]   // the registration's factory returns IBoiler
+public static partial class BoilerModule;
+
+[Module]
+[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+public static partial class ApplianceModule;
+
+// In the application:
+[Container]
+[Import(typeof(BoilerModule))]
+[Import(typeof(ApplianceModule))]   // IBoiler doesn't convert to IAppliance
+public static partial class CoffeeShop;
+```
+
+**Fix:** Grant the container's assembly `InternalsVisibleTo` in the library, so the container constructs the implementation once for all of them. Or keep the scan from matching the implementation, or register it under a service that converts to the scan's interface.
+
 ## Extending containers
 
 These concern a container that [extends](./04-registration/08-extending-containers.md) another with `[Container(Extends = typeof(...))]`. Each is reported on the `Extends` argument.

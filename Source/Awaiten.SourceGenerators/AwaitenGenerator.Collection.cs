@@ -688,7 +688,9 @@ partial class AwaitenGenerator
 		bool skipUnconstructable = false;
 		string? onActivated = null;
 		string? onRelease = null;
+		string? implementationName = null;
 		string[] asyncInitializers = [];
+		string[] asyncInitializerMethods = [];
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "AsyncInitializers" && argument.Value is { Kind: TypedConstantKind.Array, IsNull: false, } types)
@@ -697,6 +699,10 @@ partial class AwaitenGenerator
 					.Select(type => (type.Value as ITypeSymbol)?.ToDisplayString(FullyQualified))
 					.OfType<string>()
 					.ToArray();
+			}
+			else if (argument.Key == "AsyncInitializerMethods" && argument.Value is { Kind: TypedConstantKind.Array, IsNull: false, } methods)
+			{
+				asyncInitializerMethods = methods.Values.Select(method => method.Value).OfType<string>().ToArray();
 			}
 			else if (argument.Key == "Lifetime" && argument.Value.Value is int value)
 			{
@@ -714,6 +720,10 @@ partial class AwaitenGenerator
 			{
 				onRelease = release;
 			}
+			else if (argument.Key == "Implementation" && argument.Value.Value is string name)
+			{
+				implementationName = name;
+			}
 		}
 
 		// A library built before the generator reported these leaves them all unset: the traits stay unknown then,
@@ -721,7 +731,8 @@ partial class AwaitenGenerator
 		ImplementationTraits traits = new(
 			new EquatableArray<string>(asyncInitializers),
 			NamedFlag(attribute, "Disposable"),
-			NamedFlag(attribute, "AsyncDisposable"));
+			NamedFlag(attribute, "AsyncDisposable"),
+			new EquatableArray<string>(asyncInitializerMethods));
 
 		string serviceType = service.ToDisplayString(FullyQualified);
 		if (origin is not null && SkippedScanMatch(origin, factory) is var (implementation, reason))
@@ -775,9 +786,21 @@ partial class AwaitenGenerator
 			// resolves its post-instance parameters from this container's graph.
 			OnActivated: onActivated,
 			OnRelease: onRelease,
-			Traits: traits.IsEmpty ? null : traits));
+			Traits: traits.IsEmpty ? null : traits,
+			ScanImplementation: origin is null || implementationName is null ? null : ScannedImplementation(origin, implementationName, context.Compilation)));
 		return true;
 	}
+
+	/// <summary>
+	///     The implementation of <paramref name="module" />'s assembly named <paramref name="metadataName" />, when this
+	///     compilation names no other type so, or <see langword="null" />. Its fully qualified name then identifies it
+	///     among every registration of the container.
+	/// </summary>
+	private static INamedTypeSymbol? ScannedImplementation(INamedTypeSymbol module, string metadataName, Compilation compilation)
+		=> module.ContainingAssembly.GetTypeByMetadataName(metadataName) is { } implementation
+		   && SymbolEqualityComparer.Default.Equals(compilation.GetTypeByMetadataName(metadataName), implementation)
+			? implementation
+			: null;
 
 	/// <summary>
 	///     AWT168: a contextual binding is stored under a synthetic per-consumer key (see <c>ContextKey</c>), which

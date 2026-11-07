@@ -72,11 +72,18 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	public string? OnRelease { get; set; }
 
 	/// <summary>
-	///     The types of the module's <see cref="AsyncInitializerAttribute{T}" /> conventions the match is, which the
-	///     consumer cannot read off <typeparamref name="TService" />, so it runs those conventions after construction.
-	///     Null when no convention of the module matches.
+	///     The types of the module's <see cref="AsyncInitializerAttribute{T}" /> conventions that run on the match, one
+	///     per convention, which the consumer cannot read off <typeparamref name="TService" />, so it runs those
+	///     conventions after construction. Null when no convention of the module matches.
 	/// </summary>
 	public Type[]? AsyncInitializers { get; set; }
+
+	/// <summary>
+	///     The name of the method of each convention in <see cref="AsyncInitializers" />, at the same position, so the
+	///     consumer runs exactly the conventions the module selected: a convention whose method another convention already
+	///     runs on the match is left out of both. Null when no convention of the module matches.
+	/// </summary>
+	public string[]? AsyncInitializerMethods { get; set; }
 
 	/// <summary>
 	///     Whether the match implements <see cref="IDisposable" />, so the consumer owns its disposal like that of a
@@ -89,6 +96,14 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	///     that of a constructed type.
 	/// </summary>
 	public bool AsyncDisposable { get; set; }
+
+	/// <summary>
+	///     The metadata name of the match the generated factory constructs, so the consumer shares one instance between
+	///     this match and any other registration or scan match of the same implementation, as a container in the
+	///     module's own assembly does. Null when the module generates no factory for the match, since
+	///     <see cref="Factory" /> names the match then.
+	/// </summary>
+	public string? Implementation { get; set; }
 }
 
 #pragma warning restore S2326

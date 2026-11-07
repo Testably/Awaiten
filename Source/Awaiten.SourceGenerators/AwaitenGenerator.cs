@@ -606,6 +606,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		(List<RawRegistration> raw, HashSet<string> constraintRejected, Dictionary<string, (Lifetime Lifetime, string? Implementation)> openServices) = Collect(
 			containerSymbol, modules, compilation, external, injectProperties, inheritance, new WrapperRegistrations(decorators, openDecorators, composites, openComposites), diagnostics);
 
+		// A scan match a module's generated factory builds shares the instance of every other registration of its
+		// implementation, as it would in the module's own assembly.
+		ShareScannedInstances(raw, compilation, diagnostics);
+
 		// A scanned private nested type the resolvers cannot stand in for is skipped with AWT193, not the AWT216 error.
 		DropUnsupportedPrivateScanMatches(raw, containerSymbol, compilation, diagnostics);
 
