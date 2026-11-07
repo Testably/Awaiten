@@ -39,7 +39,21 @@ public class ModuleHandleSharingTests
 		using AliasedDisposableContainer.Scope scope = container.CreateScope();
 		await That(scope.Resolve<IAliasedCup>()).IsNotNull();
 	}
+
+	[Test]
+	public async Task InternalServiceOnlyALaterModuleCanBuild_IsProvidedByThatModule()
+	{
+		using ProvidedStoreContainer.Root container = new();
+
+		await That(container.Resolve<IProvidedChef>().Store.GetType().Name).IsEqualTo("ProvidedStore")
+			.Because("the module first by name declares the handle, but the module that can build the store serves it");
+	}
 }
+
+[Container]
+[Import(typeof(CrossAssemblyProvidedBModule))]
+[Import(typeof(CrossAssemblyProvidedCModule))]
+public static partial class ProvidedStoreContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyAliasedDisposableModule))]

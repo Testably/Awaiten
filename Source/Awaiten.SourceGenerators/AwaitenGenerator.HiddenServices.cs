@@ -70,23 +70,21 @@ partial class AwaitenGenerator
 			   && modules.Any(other => !SymbolEqualityComparer.Default.Equals(other, Module));
 
 		/// <summary>
-		///     Whether a member of this module may take <paramref name="service" /> through the handle of the other module
-		///     that provides it: the module does not register the service itself, and the provider builds it on its own,
-		///     judged without its own cross-module dependencies so the question never recurses.
+		///     Whether a member of this module may take <paramref name="service" /> through the handle that another module
+		///     declares (see <see cref="Provider" />): the module does not register the service itself, and another module
+		///     that registers it builds it on its own, judged without its own cross-module dependencies so the question
+		///     never recurses. That module serves the handle to a consuming container that imports it.
 		/// </summary>
 		public bool ProvidedElsewhere(INamedTypeSymbol service)
-		{
-			if (!CrossModule
-			    || Services.ContainsKey(service)
-			    || !IsHiddenService(service, Module, Compilation)
-			    || Provider(service) is not { } provider
-			    || SymbolEqualityComparer.Default.Equals(provider, Module))
-			{
-				return false;
-			}
-
-			return Assembly.Probe(provider) is { } probe && probe.Services.ContainsKey(service) && !probe.NonViable.Contains(service);
-		}
+			=> CrossModule
+			   && !Services.ContainsKey(service)
+			   && IsHiddenService(service, Module, Compilation)
+			   && Provider(service) is not null
+			   && Assembly.Modules.Any(other => !SymbolEqualityComparer.Default.Equals(other, Module)
+			                                    && Assembly.RegistrationsOf(other).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service))
+			                                    && Assembly.Probe(other) is { } probe
+			                                    && probe.Services.ContainsKey(service)
+			                                    && !probe.NonViable.Contains(service));
 
 		/// <summary>Whether the module's assembly grants <c>InternalsVisibleTo</c>, so a failure may be left to such an assembly.</summary>
 		public bool Friends { get; }
@@ -1112,8 +1110,9 @@ partial class AwaitenGenerator
 		};
 
 	/// <summary>
-	///     AWT236 when a member of the module takes an internal service that the module does not register but another
-	///     module of its assembly does, since a handle serves only the module that declares it. Only in the module's own build.
+	///     AWT236 when a member of the module takes an internal service that the module does not register but other
+	///     modules of its assembly do, none of which can share its handle (see <see cref="HiddenServices.ProvidedElsewhere" />).
+	///     The message names every such module. Only in the module's own build.
 	/// </summary>
 	private static PendingDiagnostic? InternalServiceOfAnotherModule(ITypeSymbol type, ModuleScanContext context)
 	{
@@ -1124,20 +1123,19 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		foreach (KeyValuePair<INamedTypeSymbol, List<ModuleRegistration>> other in hidden.Assembly.Registrations)
-		{
-			if (!SymbolEqualityComparer.Default.Equals(other.Key, context.Module)
-			    && other.Value.Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service)))
-			{
-				return new PendingDiagnostic(Diagnostics.ModuleHiddenServiceInOtherModule, [
-					Display(service.ToDisplayString(FullyQualified)),
-					Display(other.Key.ToDisplayString(FullyQualified)),
-					Display(context.Module.ToDisplayString(FullyQualified)),
-				]);
-			}
-		}
-
-		return null;
+		List<string> others = hidden.Assembly.Registrations
+			.Where(other => !SymbolEqualityComparer.Default.Equals(other.Key, context.Module)
+			                && other.Value.Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service)))
+			.Select(other => $"'{Display(other.Key.ToDisplayString(FullyQualified))}'")
+			.OrderBy(name => name, StringComparer.Ordinal)
+			.ToList();
+		return others.Count == 0
+			? null
+			: new PendingDiagnostic(Diagnostics.ModuleHiddenServiceInOtherModule, [
+				Display(service.ToDisplayString(FullyQualified)),
+				$"{(others.Count == 1 ? "the module" : "the modules")} {string.Join(", ", others)}",
+				Display(context.Module.ToDisplayString(FullyQualified)),
+			]);
 	}
 
 	/// <summary>The <c>[Module]</c> classes declared in <paramref name="ns" /> and its nested namespaces and types.</summary>

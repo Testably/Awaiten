@@ -2026,13 +2026,13 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     In a module's own build, a generated factory needs an internal service that the module does not register but
-	///     another module of the same assembly does, and that module cannot share its handle: it cannot receive generated
-	///     members, or cannot build the service on its own.
+	///     other modules of the same assembly do, and none of them can share its handle: they cannot receive generated
+	///     members, or cannot build the service on their own.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleHiddenServiceInOtherModule = new(
 		"AWT236",
 		"Internal service registered in another module",
-		"{0}, but {1} needs the internal service '{2}', which only the module '{3}' registers, so a container in another assembly cannot provide it to '{4}'; register '{2}' in '{4}' too, or move both registrations into one module",
+		"{0}, but {1} needs the internal service '{2}', which is registered only by {3}, so a container in another assembly cannot provide it to '{4}'; register '{2}' in '{4}' too, or move both registrations into one module",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
