@@ -995,6 +995,90 @@ public class ModuleHiddenServiceTests
 			await That(result.Diagnostics).Contains("*AWT107*'Lib.Impl'*Singleton*Transient*").AsWildcard()
 				.Because("the modules build the implementation into one instance handle, whose registrations the container checks like any other");
 		}
+
+		private const string DirectiveModules = """
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal sealed class Store : System.IDisposable { public void Dispose() { } }
+			internal sealed class Grinder : IGrinder { public Grinder(Store store) { } }
+
+			[Module]
+			[Singleton<Store>]
+			public static partial class AModule { }
+
+			[Module]
+			[Singleton<Store>(OnActivated = nameof(Activate), SuppressDisposal = true)]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class BModule
+			{
+			    internal static void Activate(Store store) { }
+			}
+			""";
+
+		[Test]
+		public async Task DirectivesOfALaterImport_ReportAwt166InTheConsumer()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(DirectiveModules, """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(AModule))]
+				[Import(typeof(BModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT166*'Lib.Store'*OnActivated*").AsWildcard()
+				.And.Contains("*AWT166*'Lib.Store'*SuppressDisposal*").AsWildcard()
+				.Because("the first import wins and the later one sets directives it does not, as in a container of the modules' own assembly");
+		}
+
+		[Test]
+		public async Task ProductionConflictAcrossModules_ReportsAwt111InTheConsumer()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(DirectiveModules.Replace("[Singleton<Store>(OnActivated = nameof(Activate), SuppressDisposal = true)]", "[Singleton<Store>(Factory = nameof(Create))]")
+				.Replace("internal static void Activate(Store store) { }", "internal static Store Create() => new();"), """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(AModule))]
+				[Import(typeof(BModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT111*'Lib.Store'*a constructor*factory 'Lib.BModule.Create'*").AsWildcard()
+				.Because("the modules produce the implementation differently, which their generated factories hide");
+		}
+
+		[Test]
+		public async Task DirectivesOfTheFirstImport_AreKeptWithoutAConflict()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(DirectiveModules, """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(BModule))]
+				[Import(typeof(AModule))]
+				public static partial class MyContainer;
+				""");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a later registration that leaves the directives unset merges with the first one");
+			await That(source).Contains("global::Lib.BModule.Internals.HiddenHook_OnActivated_Store_")
+				.Because("the hook of the first import runs through its own wrapper");
+		}
 	}
 
 	public class Diagnostics

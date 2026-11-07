@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Awaiten.Tests.Support;
 
@@ -121,3 +122,61 @@ public static partial class CrossAssemblySharedSafeModule;
 [Singleton<SharedSafe, ISharedLocker>]
 [Singleton<SharedSafe, ISharedVault>]
 public static partial class CrossAssemblySharedVaultModule;
+/// <summary>A grinder whose internal store only <see cref="CrossAssemblyDirectiveBModule" /> hooks, initializes and keeps from disposal.</summary>
+public interface IDirectiveGrinder
+{
+	/// <summary>Whether the module's activation hook ran on the store.</summary>
+	bool StoreActivated { get; }
+
+	/// <summary>Whether the module's convention initialized the store.</summary>
+	bool StoreWarmed { get; }
+
+	/// <summary>Whether anything disposed the store.</summary>
+	bool StoreDisposed { get; }
+}
+
+internal interface IDirectiveWarmable
+{
+	Task WarmAsync();
+}
+
+internal sealed class DirectiveStore : IDirectiveWarmable, IDisposable
+{
+	public bool Activated { get; set; }
+
+	public bool Warmed { get; private set; }
+
+	public bool Disposed { get; private set; }
+
+	public Task WarmAsync()
+	{
+		Warmed = true;
+		return Task.CompletedTask;
+	}
+
+	public void Dispose() => Disposed = true;
+}
+
+internal sealed class DirectiveGrinder(DirectiveStore store) : IDirectiveGrinder
+{
+	public bool StoreActivated => store.Activated;
+
+	public bool StoreWarmed => store.Warmed;
+
+	public bool StoreDisposed => store.Disposed;
+}
+
+/// <summary>A <c>[Module]</c> that registers the internal store plainly, and declares its instance handle as the first by name.</summary>
+[Module]
+[Singleton<DirectiveStore>]
+public static partial class CrossAssemblyDirectiveAModule;
+
+/// <summary>A <c>[Module]</c> that registers the same internal store with a hook, a convention and suppressed disposal.</summary>
+[Module]
+[AsyncInitializer<IDirectiveWarmable>(nameof(IDirectiveWarmable.WarmAsync))]
+[Singleton<DirectiveStore>(OnActivated = nameof(Activate), SuppressDisposal = true)]
+[Singleton<DirectiveGrinder, IDirectiveGrinder>]
+public static partial class CrossAssemblyDirectiveBModule
+{
+	internal static void Activate(DirectiveStore store) => store.Activated = true;
+}

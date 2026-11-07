@@ -28,8 +28,9 @@ namespace Awaiten.SourceGenerators;
 ///     <c>ScanImplementation</c> is the implementation a module's generated scan factory in another assembly builds,
 ///     which lets the container share one instance with every other registration of it (see <c>ShareScannedInstances</c>).
 ///     <c>Unlisted</c> marks a dependency-only service, the generated handle of a service a module of another assembly
-///     registers under an internal type, which the container never offers for resolution, and <c>Hidden</c> the
-///     implementation such a handle holds.
+///     registers under an internal type, which the container never offers for resolution, <c>Hidden</c> the
+///     implementation such a handle holds, and <c>HiddenProduction</c> how the module produces it, which two handle
+///     registrations of one implementation are compared by (AWT111).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -69,7 +70,8 @@ internal sealed record RawRegistration(
 	IMethodSymbol? Constructor = null,
 	INamedTypeSymbol? ScanImplementation = null,
 	bool Unlisted = false,
-	INamedTypeSymbol? Hidden = null);
+	INamedTypeSymbol? Hidden = null,
+	string? HiddenProduction = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -340,6 +342,9 @@ partial class AwaitenGenerator
 
 		/// <inheritdoc cref="RawRegistration" />
 		public INamedTypeSymbol? Hidden { get; init; }
+
+		/// <inheritdoc cref="RawRegistration" />
+		public string? HiddenProduction { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

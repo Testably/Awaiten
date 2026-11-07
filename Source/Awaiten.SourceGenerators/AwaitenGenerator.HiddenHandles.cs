@@ -205,25 +205,6 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		// Another module that declares the handle and registers the implementation the same way builds the one shared
-		// instance, so both registrations coalesce into one, as they do in a container of the modules' own assembly.
-		INamedTypeSymbol builder = module;
-		List<ModuleRegistration> built = registrations;
-		string factoryName = factory.Name;
-		if (handle.ContainingType?.ContainingType is { } declaring
-		    && !SymbolEqualityComparer.Default.Equals(declaring, module)
-		    && HiddenProducer(declaring, HiddenFactoryName(implementation), compilation) is { Handle: { } shared, } declared
-		    && SymbolEqualityComparer.Default.Equals(shared, handle)
-		    && HandledTogether(ConstructedModuleRegistrations(declaring, compilation, members: true)
-			    .Where(candidate => SymbolEqualityComparer.Default.Equals(candidate.Implementation, implementation))) is { Count: > 0, } declaredRegistrations
-		    && declaredRegistrations[0].Production == registrations[0].Production
-		    && declaredRegistrations[0].Member == registrations[0].Member)
-		{
-			builder = declaring;
-			built = declaredRegistrations;
-			factoryName = declared.Name;
-		}
-
 		List<RawRegistration> handled = new();
 		if (implicitHandles.Add(implementation))
 		{
@@ -259,28 +240,26 @@ partial class AwaitenGenerator
 				ServiceType = handle.ToDisplayString(FullyQualified),
 				ServiceSymbol = handle,
 				Implementation = handle,
-				Origin = builder,
 				Production = registration.Production == ProductionKind.Instance ? ProductionKind.Instance : ProductionKind.Factory,
-				ProductionMember = InInternals(factoryName),
+				ProductionMember = InInternals(factory.Name),
+				HiddenProduction = DescribeProduction(registrations[0].Production, registrations[0].Member, module),
 				Key = null,
-				Eager = registrations.Concat(built).Any(candidate => NamedFlag(candidate.Attribute, "Eager")),
+				Eager = NamedFlag(registrations[0].Attribute, "Eager"),
 				OnActivated = Hook(release: false),
 				OnRelease = Hook(release: true),
-				SuppressDisposal = NamedFlag(built[0].Attribute, "SuppressDisposal"),
+				SuppressDisposal = NamedFlag(registrations[0].Attribute, "SuppressDisposal"),
 				// A factory member may return any subtype, which the handle's variant reveals only at run time.
-				Traits = registration.Production == ProductionKind.Constructor ? TraitsOf(implementation, DeclaredAsyncInitializers(builder, compilation, null)) : null,
+				Traits = registration.Production == ProductionKind.Constructor ? TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)) : null,
 				TraitsExact = registration.Production == ProductionKind.Constructor,
 				Unlisted = true,
 				Hidden = implementation,
 			};
 
 		string? Hook(bool release)
-			=> built
-				.Select(candidate => NamedArgument(candidate.Attribute, release ? "OnRelease" : "OnActivated"))
-				.Where(hook => hook is not null)
-				.Select(hook => HiddenHookName(implementation, release, hook!))
-				.Where(wrapper => !InternalsMembers(builder, wrapper).IsEmpty)
-				.Select(InInternals)
-				.FirstOrDefault();
+			=> NamedArgument(registrations[0].Attribute, release ? "OnRelease" : "OnActivated") is { } hook
+			   && HiddenHookName(implementation, release, hook) is { } wrapper
+			   && !InternalsMembers(module, wrapper).IsEmpty
+				? InInternals(wrapper)
+				: null;
 	}
 }

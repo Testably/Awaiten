@@ -456,6 +456,7 @@ partial class AwaitenGenerator
 					Constructor = reg.Constructor,
 					Unlisted = reg.Unlisted,
 					Hidden = reg.Hidden,
+					HiddenProduction = reg.HiddenProduction,
 				};
 				info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
 				info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
@@ -787,8 +788,8 @@ partial class AwaitenGenerator
 				LocationInfo.From(registration.Location),
 				new EquatableArray<string>([
 					DisplayInstance(registration.ImplementationType),
-					DescribeProduction(info.Production, info.ProductionMember, info.Origin ?? containerSymbol),
-					DescribeProduction(registration.Production, registration.ProductionMember, registration.Origin ?? containerSymbol),
+					info.HiddenProduction ?? DescribeProduction(info.Production, info.ProductionMember, info.Origin ?? containerSymbol),
+					registration.HiddenProduction ?? DescribeProduction(registration.Production, registration.ProductionMember, registration.Origin ?? containerSymbol),
 				])));
 		}
 
@@ -973,13 +974,17 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Two registrations of the same implementation conflict when they produce it differently: a different kind
-	///     (constructor vs factory vs instance), a different member, or the same member name on different owners.
+	///     (constructor vs factory vs instance), a different member, or the same member name on different owners. The
+	///     instance handles of several modules of another assembly (see <see cref="ThroughHandle" />) conflict when the
+	///     modules produce the implementation differently, whichever module's generated factory builds it.
 	/// </summary>
 	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
-		=> info.Production != registration.Production
-		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)
-		   || (registration.Production != ProductionKind.Constructor
-		       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin));
+		=> info.HiddenProduction is not null || registration.HiddenProduction is not null
+			? info.HiddenProduction != registration.HiddenProduction
+			: (info.Production != registration.Production
+			   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)
+			   || (registration.Production != ProductionKind.Constructor
+			       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin)));
 
 	/// <summary>
 	///     Names a production strategy in the AWT111 message, qualifying a member with its owner so two members of the

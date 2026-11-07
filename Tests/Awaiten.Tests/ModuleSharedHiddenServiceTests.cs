@@ -58,7 +58,28 @@ public class ModuleSharedHiddenServiceTests
 		await That(container.Resolve<ISharedSafe>()).IsSameAs(container.Resolve<ISharedVault>())
 			.Because("the module that registers the implementation under a public service alone shares the instance of the handle the other module builds");
 	}
+
+	[Test]
+	public async Task ImplementationAnotherModuleDeclaresTheHandleOf_TakesTheDirectivesOfTheImportedModule()
+	{
+		IDirectiveGrinder grinder;
+		await using (DirectiveContainer.Root container = new())
+		{
+			grinder = await container.ResolveAsync<IDirectiveGrinder>();
+			await That(grinder.StoreActivated).IsTrue()
+				.Because("the imported module's hook runs, though the module first by name declares the instance handle");
+			await That(grinder.StoreWarmed).IsTrue()
+				.Because("the imported module's convention initializes the store");
+		}
+
+		await That(grinder.StoreDisposed).IsFalse()
+			.Because("the imported module suppresses the disposal of the store");
+	}
 }
+
+[Container]
+[Import(typeof(CrossAssemblyDirectiveBModule))]
+public static partial class DirectiveContainer;
 
 [Container]
 [Import(typeof(CrossAssemblySharedMenuModule))]
