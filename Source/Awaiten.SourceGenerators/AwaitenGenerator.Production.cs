@@ -144,7 +144,8 @@ partial class AwaitenGenerator
 			ReleaseParameters: releaseParameters,
 			SuppressDisposal: info.SuppressDisposal,
 			PrivateServices: PrivateServices(info, containerSymbol),
-			ResolverType: resolverType);
+			ResolverType: resolverType,
+			IsAsyncActivation: activationHook is not null && IsAsyncHookReturn(activationHook.ReturnType, compilation));
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -616,6 +617,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation, …)</c>
+	///     (or, for an awaited activation hook, a <c>static Task</c>/<c>ValueTask</c> one; other awaitable returns are
+	///     <see cref="Diagnostics.UnsupportedAsyncLifecycleHook">AWT232</see>)
 	///     method on its owner - the container, or the module whose registration named the hook, kept per slot on
 	///     <c>ImplInfo</c> since two scan registrations with different origins can fill one implementation's two
 	///     slots (never falling back to the container) - returning the name the generated Root/Scope calls it by and its
@@ -688,6 +691,15 @@ partial class AwaitenGenerator
 
 		if (matches.Count == 1 && ambiguousMethods.Count == 0)
 		{
+			if (UnsupportedAsyncHook(matches[0], release, context.Compilation) is { } reason)
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.UnsupportedAsyncLifecycleHook,
+					info.Location,
+					new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, reason,])));
+				return (null, default, null);
+			}
+
 			return (QualifiedHook(origin, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context), matches[0]);
 		}
 
@@ -743,7 +755,8 @@ partial class AwaitenGenerator
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
 			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
-			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
+			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, Parameters.Length: >= 1, } method
+			    || !IsHookReturn(method, compilation)
 			    || (origin is not null && !compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
 				continue;
@@ -802,10 +815,12 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, bool release, BuildContext context)
 	{
+		// An awaited hook runs on the async path, so like an async factory it receives the resolve-time token.
+		bool asynchronous = IsAsyncHookReturn(hook.ReturnType, context.Compilation);
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
 		{
-			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory: false, context.External.ServiceTypes);
+			ParameterModel parameterModel = ClassifyParameter(parameter, asynchronous, context.External.ServiceTypes);
 
 			// AWT189: a hook parameter cannot be a runtime [Arg]. Dropped so it contributes no (unresolvable) graph
 			// edge and no emitted argument; the error already fails the build.
@@ -857,6 +872,42 @@ partial class AwaitenGenerator
 		}
 
 		return new EquatableArray<ParameterModel>(parameters.ToArray());
+	}
+
+	/// <summary>
+	///     Whether <paramref name="method" /> returns what a lifecycle hook may: <c>void</c>, or a <c>Task</c> or
+	///     <c>ValueTask</c> with or without a result. A result or an asynchronous release hook is still unusable, which
+	///     <see cref="UnsupportedAsyncHook" /> reports precisely instead of falling through to AWT164.
+	/// </summary>
+	private static bool IsHookReturn(IMethodSymbol method, Compilation compilation)
+		=> method.ReturnsVoid
+		   || IsAsyncHookReturn(method.ReturnType, compilation)
+		   || IsAsyncFactoryReturn(method.ReturnType, compilation, out _);
+
+	/// <summary>
+	///     Whether a hook returning <paramref name="returnType" /> is awaited: a non-generic <c>Task</c> or
+	///     <c>ValueTask</c>, matched by the canonical metadata symbols like <see cref="IsAsyncFactoryReturn" />.
+	/// </summary>
+	private static bool IsAsyncHookReturn(ITypeSymbol returnType, Compilation compilation)
+		=> SymbolEqualityComparer.Default.Equals(returnType, compilation.GetTypeByMetadataName("System.Threading.Tasks.Task"))
+		   || (compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask") is { } valueTask
+		       && SymbolEqualityComparer.Default.Equals(returnType, valueTask));
+
+	/// <summary>
+	///     Why the container cannot run <paramref name="hook" /> (<see cref="Diagnostics.UnsupportedAsyncLifecycleHook">AWT232</see>),
+	///     or <see langword="null" /> when it can: a hook's result has nowhere to go, and teardown does not await a
+	///     release hook.
+	/// </summary>
+	private static string? UnsupportedAsyncHook(IMethodSymbol hook, bool release, Compilation compilation)
+	{
+		if (IsAsyncFactoryReturn(hook.ReturnType, compilation, out _))
+		{
+			return $"it returns '{Display(hook.ReturnType.ToDisplayString(FullyQualified))}', but the container has no use for a hook's result; return Task or ValueTask instead";
+		}
+
+		return release && IsAsyncHookReturn(hook.ReturnType, compilation)
+			? "an OnRelease hook cannot be asynchronous, because teardown does not await it; return void instead"
+			: null;
 	}
 
 	/// <summary>

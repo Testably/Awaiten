@@ -48,11 +48,12 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
-	///     The name of the generated <c>public static void</c> activation wrapper on the module, run once the match
+	///     The name of the generated <c>public static</c> activation wrapper on the module, run once the match
 	///     is constructed. The module resolves and closes its (possibly <c>internal</c>) <c>OnActivated</c> hook at
 	///     its own build and emits this public wrapper so the consumer can run it without naming the internal hook;
-	///     the wrapper's parameters after the instance resolve from the consumer's graph. Null when the scan
-	///     declared no activation hook.
+	///     the wrapper's parameters after the instance resolve from the consumer's graph. It returns what the hook
+	///     returns, so the consumer awaits a <c>Task</c> or <c>ValueTask</c> one. Null when the scan declared no
+	///     activation hook.
 	/// </summary>
 	public string? OnActivated { get; set; }
 

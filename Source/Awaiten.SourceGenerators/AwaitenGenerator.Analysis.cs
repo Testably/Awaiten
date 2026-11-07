@@ -395,16 +395,15 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Marks every instance that is an async-taint source (async-initialized, or produced by an asynchronous
-	///     factory the container reaches only by awaiting) or reaches one through non-deferred (Direct) edges, by
-	///     fixpoint over the dependency graph.
+	///     Marks every instance that is an async-taint source (<see cref="InstanceModel.IsAsyncSource" />) or reaches
+	///     one through non-deferred (Direct) edges, by fixpoint over the dependency graph.
 	/// </summary>
 	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
 	{
 		bool[] tainted = new bool[instances.Count];
 		for (int i = 0; i < instances.Count; i++)
 		{
-			tainted[i] = instances[i].IsAsyncInitializable || instances[i].IsAsyncFactory;
+			tainted[i] = instances[i].IsAsyncSource;
 		}
 
 		bool changed = true;

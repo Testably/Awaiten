@@ -68,7 +68,7 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
-				.Because("a lifecycle hook must be a void method");
+				.Because("a lifecycle hook returns void, Task or ValueTask");
 		}
 
 		[Test]

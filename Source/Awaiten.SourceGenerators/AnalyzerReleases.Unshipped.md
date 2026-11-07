@@ -125,6 +125,7 @@
  AWT226  | Awaiten   | Error    | A type or member a container inherits through Extends is not accessible from it, or a private implementation of the base it cannot build through the base's generated factory
  AWT230  | Awaiten   | Error    | An imported module of another assembly declares a decorator, composite or open generic registration whose type the container cannot construct, which a module does not self-compile
  AWT231  | Awaiten   | Error    | An imported module of another assembly registers an implementation the container cannot construct, for which the module generated no factory or hook wrapper because it cannot support it
+ AWT232  | Awaiten   | Error    | An OnActivated hook returns Task<T> or ValueTask<T>, or an OnRelease hook returns Task or ValueTask
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.

@@ -275,8 +275,8 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits one lifecycle-hook wrapper: a <c>public static void</c> method taking the accessible exposure
-	///     interface as its first parameter, casting it to the hook's own instance parameter type (the internal
+	///     Emits one lifecycle-hook wrapper: a <c>public static</c> method returning what the hook returns (so an
+	///     asynchronous hook's task reaches the consumer), taking the accessible exposure interface as its first parameter, casting it to the hook's own instance parameter type (the internal
 	///     implementation, a base type it accepts, or the closed marker form of a generic hook) and forwarding it -
 	///     plus the graph-resolved parameters after it - to the module's own (possibly <c>internal</c>) hook. The
 	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
@@ -310,7 +310,7 @@ internal static partial class Sources
 		}
 
 		Indent(builder, depth)
-			.Append(accessibility).Append(" static void ").Append(hook.WrapperName)
+			.Append(accessibility).Append(" static ").Append(hook.ReturnType).Append(' ').Append(hook.WrapperName)
 			.Append('(').Append(instanceType).Append(" @").Append(instance).Append(signature).Append(") => ")
 			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
 	}

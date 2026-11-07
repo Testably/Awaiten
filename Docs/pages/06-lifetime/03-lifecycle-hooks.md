@@ -46,9 +46,32 @@ An activation dependency is resolved inline as the hook is called. A release dep
 
 Hook parameters participate in the graph like any other dependency: an unregistered one is [AWT101](../09-diagnostics.md#awt101), and they are covered by cycle, captive-dependency and async-taint analysis. A hook parameter cannot be a runtime `[Arg]` (there is no `Func<…>` call site to supply one), which is [AWT189](../09-diagnostics.md#awt189). A release hook parameter also cannot be a `Func<T>` or `Lazy<T>`: those capture a resolver delegate rather than a value, and by the time the hook runs the owner is already tearing down, so invoking the delegate would throw. That is [AWT191](../09-diagnostics.md#awt191); an activation hook may take them freely.
 
+## Asynchronous activation
+
+An `OnActivated` hook may return `Task` or `ValueTask`. The container awaits it, so the service becomes [async-initialized](../03-core-concepts/03-async-initialization.md#keep-the-service-free-of-awaiten), exactly as if it implemented `IAsyncInitializable`. Connect the payment terminal without putting Awaiten on it.
+
+```csharp
+[Container]
+[Singleton<Settings>]
+[Singleton<PaymentTerminal, IPaymentTerminal>(OnActivated = nameof(ConnectAsync))]
+public static partial class CoffeeShop
+{
+    private static Task ConnectAsync(PaymentTerminal terminal, Settings settings, CancellationToken cancellationToken)
+        => terminal.HandshakeAsync(cancellationToken);
+}
+```
+
+A `CancellationToken` parameter receives the token passed to `ResolveAsync`, `InitializeAsync` or `CreateScopeAsync`. Every other parameter after the instance resolves from the graph, as for a synchronous hook.
+
+The service and everything that depends on it now resolve through `ResolveAsync`. All async rules apply: a synchronous `Func<T>` or `Lazy<T>` over it is [AWT119](../09-diagnostics.md#awt119), an `Eager` singleton needs `AsyncSafety.SyncAfterInit` ([AWT161](../09-diagnostics.md#awt161)), and the MS.DI bridge exposes it as `Task<T>`.
+
+The hook works on every registration the container owns: any lifetime, keyed, `Factory`, open generic, scan and module registrations. A module or a base container runs it through a generated wrapper that returns the hook's task.
+
+Only `Task` and `ValueTask` are awaited. A hook that returns `Task<T>` or `ValueTask<T>` is [AWT232](../09-diagnostics.md#awt232), because the container has no use for the result. `OnRelease` stays synchronous: teardown does not await a release hook, so an asynchronous one is AWT232 too. Put asynchronous cleanup in `DisposeAsync`.
+
 ## Ordering and failure
 
-Activation happens before initialization and before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. If `OnActivated` throws, the instance is not published. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.
+Activation happens before initialization and before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. An asynchronous hook keeps the same place: the container awaits it, then calls `InitializeAsync` if the service also implements `IAsyncInitializable`. If `OnActivated` throws or its task faults, the instance is not published. After a failed asynchronous hook, a disposable instance is disposed, as after a failed `InitializeAsync`. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.
 
 If `OnRelease` throws, the teardown goes on: the other release hooks still run, and every instance is still disposed, including the one whose hook failed. The failure surfaces once the teardown is complete, together with any other teardown failure. See [Disposal → When teardown fails](../03-core-concepts/04-disposal.md#when-teardown-fails).
 

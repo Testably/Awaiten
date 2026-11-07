@@ -9,9 +9,10 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     exposed as, its selected constructor's parameters, its <c>[Inject]</c> properties, and disposal/async flags.
 ///     Registrations of the same implementation are coalesced into one instance, so a multi-service registration
 ///     shares a single object. <see cref="Production" /> records how it is produced: a constructor,
-///     a container Factory method, or a pre-built Instance member. The three async flags are distinct taint
+///     a container Factory method, or a pre-built Instance member. The four async flags are distinct taint
 ///     sources, any of which forces asynchronous resolution: <see cref="IsAsyncInitializable" /> (implements
-///     <c>IAsyncInitializable</c>), <see cref="IsAsyncFactory" /> (produced by an async factory), and
+///     <c>IAsyncInitializable</c>), <see cref="IsAsyncFactory" /> (produced by an async factory),
+///     <see cref="IsAsyncActivation" /> (its <c>OnActivated</c> hook returns <c>Task</c> or <c>ValueTask</c>), and
 ///     <see cref="IsAsyncTainted" /> (reaches one through a non-deferred dependency).
 ///     <see cref="RuntimeDisposalCheck" /> is set for a factory whose declared return type is not
 ///     <c>IDisposable</c> but could produce one at runtime, so the resolver tracks it behind a runtime type test.
@@ -58,7 +59,8 @@ internal sealed record InstanceModel(
 	bool SuppressDisposal = false,
 	EquatableArray<int> OutermostDecorators = default,
 	EquatableArray<string> PrivateServices = default,
-	string? ResolverType = null)
+	string? ResolverType = null,
+	bool IsAsyncActivation = false)
 {
 	/// <summary>
 	///     The type the generated resolvers return and the async cache holds: <see cref="ResolverType" /> for an
@@ -88,10 +90,10 @@ internal sealed record InstanceModel(
 
 	/// <summary>
 	///     Whether this instance is itself an async-taint source (not merely tainted through a dependency): it is
-	///     <c>IAsyncInitializable</c> or produced by an async factory. Reachable only by awaiting, so a synchronous
-	///     relationship over it is AWT119 rather than a transitive AWT120.
+	///     <c>IAsyncInitializable</c>, produced by an async factory, or activated by an awaited <c>OnActivated</c> hook.
+	///     Reachable only by awaiting, so a synchronous relationship over it is AWT119 rather than a transitive AWT120.
 	/// </summary>
-	public bool IsAsyncSource => IsAsyncInitializable || IsAsyncFactory;
+	public bool IsAsyncSource => IsAsyncInitializable || IsAsyncFactory || IsAsyncActivation;
 
 	/// <summary>
 	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked

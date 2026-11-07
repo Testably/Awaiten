@@ -61,10 +61,11 @@ public sealed class ScanAttribute : Attribute
 	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
-	///     The name of a <c>static void</c> method on the container invoked once each match has been constructed - a
-	///     synchronous post-construction hook applied to every match. Its first parameter is the match, so it must
+	///     The name of a static method on the container invoked once each match has been constructed - a
+	///     post-construction hook applied to every match. Its first parameter is the match, so it must
 	///     accept every one: type it as the scanned marker (or <c>object</c>), and any parameters after it are
-	///     resolved from the graph like a constructor's.
+	///     resolved from the graph like a constructor's. A method returning <c>Task</c> or <c>ValueTask</c> is awaited
+	///     and makes every match async-initialized.
 	/// </summary>
 	public string? OnActivated { get; set; }
 
@@ -141,10 +142,11 @@ public sealed class ScanAttribute<TMarker> : Attribute
 	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
-	///     The name of a <c>static void</c> method on the container invoked once each match has been constructed - a
-	///     synchronous post-construction hook applied to every match. Its first parameter is the match, so it must
+	///     The name of a static method on the container invoked once each match has been constructed - a
+	///     post-construction hook applied to every match. Its first parameter is the match, so it must
 	///     accept every one: type it as <typeparamref name="TMarker" /> (or <c>object</c>), and any parameters after
-	///     it are resolved from the graph like a constructor's.
+	///     it are resolved from the graph like a constructor's. A method returning <c>Task</c> or <c>ValueTask</c> is
+	///     awaited and makes every match async-initialized.
 	/// </summary>
 	public string? OnActivated { get; set; }
 

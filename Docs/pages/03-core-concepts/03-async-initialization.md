@@ -1,5 +1,5 @@
 ---
-description: Give services asynchronous setup with IAsyncInitializable and let the compiler stop you from using them too early.
+description: Give services asynchronous setup with IAsyncInitializable or an asynchronous OnActivated hook, and let the compiler stop you from using them too early.
 ---
 
 # Async initialization
@@ -29,7 +29,7 @@ public sealed class EspressoMachine : IAsyncInitializable
 public static partial class CoffeeShop;
 ```
 
-A service that implements `IAsyncInitializable` is *async-tainted*. So is any service that depends on one. Awaiten follows the taint through the whole graph.
+A service with asynchronous setup is *async-tainted*. So is any service that depends on one. Awaiten follows the taint through the whole graph.
 
 ```mermaid
 flowchart RL
@@ -49,6 +49,28 @@ EspressoMachine machine = await shop.ResolveAsync<EspressoMachine>(cancellationT
 ```
 
 A singleton is initialized exactly once, even under concurrent resolves. Every caller gets the same warmed instance.
+
+## Keep the service free of Awaiten
+
+`IAsyncInitializable` puts an Awaiten interface on your service. To keep the service free of Awaiten, put the setup on the container instead. Name an `OnActivated` hook that returns `Task` or `ValueTask`.
+
+```csharp
+public sealed class PaymentTerminal : IPaymentTerminal   // no Awaiten reference
+{
+    public Task HandshakeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+[Container]
+[Singleton<EspressoMachine>]
+[Singleton<PaymentTerminal, IPaymentTerminal>(OnActivated = nameof(ConnectAsync))]
+public static partial class CoffeeShop
+{
+    private static Task ConnectAsync(PaymentTerminal terminal, CancellationToken cancellationToken)
+        => terminal.HandshakeAsync(cancellationToken);
+}
+```
+
+The container awaits the hook exactly once per instance, after construction and before the service is handed out. A `CancellationToken` parameter receives the token you pass to `ResolveAsync`, `InitializeAsync` or `CreateScopeAsync`. Every other rule on this page applies as if `PaymentTerminal` implemented `IAsyncInitializable`. See [Lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md#asynchronous-activation) for the hook's parameters and order.
 
 ## Warm everything up front
 
