@@ -1254,6 +1254,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:37:14 2026 \u002B0100",
         "message": "fix: stop advising to make a private struct implementation internal (#290)"
+      },
+      {
+        "sha": "bba2f8ee31e5b39691179d019e81d9e17953f6b5",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
+        "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
       }
     ],
     "labels": [
@@ -1465,7 +1471,8 @@ window.BENCHMARK_DATA = {
       "3adbe6e7",
       "20751684",
       "47d7cde4",
-      "c2eb0006"
+      "c2eb0006",
+      "bba2f8ee"
     ],
     "datasets": [
       {
@@ -1680,7 +1687,8 @@ window.BENCHMARK_DATA = {
           7.769932759801547,
           5.625039557615916,
           7.929147485111441,
-          7.134927432124432
+          7.134927432124432,
+          6.102416787828718
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1692,6 +1700,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2123,7 +2132,8 @@ window.BENCHMARK_DATA = {
           8.144797930760044,
           5.71879609823227,
           7.773045597331865,
-          8.361563500549112
+          8.361563500549112,
+          7.5823596360591745
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2135,6 +2145,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2566,7 +2577,8 @@ window.BENCHMARK_DATA = {
           128.68937589327496,
           106.92758944034577,
           114.72871817861285,
-          121.40528082847595
+          121.40528082847595,
+          126.70339924494425
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2578,6 +2590,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -3005,7 +3018,8 @@ window.BENCHMARK_DATA = {
           8.774185427106344,
           7.806947524348895,
           9.817431433002154,
-          9.416603352874517
+          9.416603352874517,
+          7.777860053380331
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3017,6 +3031,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3440,7 +3455,8 @@ window.BENCHMARK_DATA = {
           11.045458747872285,
           9.560916777451833,
           11.125902941823005,
-          11.029202468120134
+          11.029202468120134,
+          10.7332625325237
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3452,6 +3468,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4924,6 +4941,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:37:14 2026 \u002B0100",
         "message": "fix: stop advising to make a private struct implementation internal (#290)"
+      },
+      {
+        "sha": "bba2f8ee31e5b39691179d019e81d9e17953f6b5",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
+        "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
       }
     ],
     "labels": [
@@ -5135,7 +5158,8 @@ window.BENCHMARK_DATA = {
       "3adbe6e7",
       "20751684",
       "47d7cde4",
-      "c2eb0006"
+      "c2eb0006",
+      "bba2f8ee"
     ],
     "datasets": [
       {
@@ -5350,7 +5374,8 @@ window.BENCHMARK_DATA = {
           8.470880098640919,
           7.256379851698876,
           8.473682566330982,
-          8.286856219172478
+          8.286856219172478,
+          6.87297858191388
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5362,6 +5387,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5793,7 +5819,8 @@ window.BENCHMARK_DATA = {
           8.590962386131286,
           5.829785167024686,
           7.810003021998065,
-          7.914983614285787
+          7.914983614285787,
+          7.554399792353312
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5805,6 +5832,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6236,7 +6264,8 @@ window.BENCHMARK_DATA = {
           126.78858768939972,
           125.16257438659667,
           114.00565416018168,
-          112.13212935129802
+          112.13212935129802,
+          128.47535875865393
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6248,6 +6277,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6675,7 +6705,8 @@ window.BENCHMARK_DATA = {
           8.786941647529602,
           7.680116426944733,
           9.793151976664861,
-          9.407313848917301
+          9.407313848917301,
+          7.83126597503821
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6687,6 +6718,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7110,7 +7142,8 @@ window.BENCHMARK_DATA = {
           14.36518911591598,
           9.416868659853936,
           14.355613851547242,
-          14.593317925930023
+          14.593317925930023,
+          13.529849948791357
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7122,6 +7155,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8594,6 +8628,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:37:14 2026 \u002B0100",
         "message": "fix: stop advising to make a private struct implementation internal (#290)"
+      },
+      {
+        "sha": "bba2f8ee31e5b39691179d019e81d9e17953f6b5",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
+        "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
       }
     ],
     "labels": [
@@ -8805,7 +8845,8 @@ window.BENCHMARK_DATA = {
       "3adbe6e7",
       "20751684",
       "47d7cde4",
-      "c2eb0006"
+      "c2eb0006",
+      "bba2f8ee"
     ],
     "datasets": [
       {
@@ -9020,7 +9061,8 @@ window.BENCHMARK_DATA = {
           26.132679790258408,
           11.640991925199826,
           20.340124646822613,
-          21.75352410674095
+          21.75352410674095,
+          11.818106722373228
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9182,6 +9224,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9463,7 +9506,8 @@ window.BENCHMARK_DATA = {
           1762.3521288463048,
           795.2319189218374,
           1536.1326716105143,
-          1560.9973545074463
+          1560.9973545074463,
+          816.1020108002883
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9475,6 +9519,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9906,7 +9951,8 @@ window.BENCHMARK_DATA = {
           25683.236106363933,
           18532.52566964286,
           30024.65450846354,
-          29977.31599644252
+          29977.31599644252,
+          18458.976832798548
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10126,7 +10172,8 @@ window.BENCHMARK_DATA = {
           32476,
           32476,
           32482,
-          32482
+          32482,
+          32477
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10345,7 +10392,8 @@ window.BENCHMARK_DATA = {
           728.145281346639,
           424.87400003579944,
           733.0398886753962,
-          751.1221101125082
+          751.1221101125082,
+          407.6954393386841
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10375,6 +10423,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10780,7 +10829,8 @@ window.BENCHMARK_DATA = {
           13890.725759887695,
           6700.985063825335,
           11716.588898794991,
-          13036.082037353515
+          13036.082037353515,
+          6561.246905008952
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10992,6 +11042,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -12264,6 +12315,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:37:14 2026 \u002B0100",
         "message": "fix: stop advising to make a private struct implementation internal (#290)"
+      },
+      {
+        "sha": "bba2f8ee31e5b39691179d019e81d9e17953f6b5",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
+        "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
       }
     ],
     "labels": [
@@ -12475,7 +12532,8 @@ window.BENCHMARK_DATA = {
       "3adbe6e7",
       "20751684",
       "47d7cde4",
-      "c2eb0006"
+      "c2eb0006",
+      "bba2f8ee"
     ],
     "datasets": [
       {
@@ -12690,7 +12748,8 @@ window.BENCHMARK_DATA = {
           255.57296552658082,
           80.89287850686482,
           185.9752994378408,
-          212.3369577884674
+          212.3369577884674,
+          78.47506074394498
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12852,6 +12911,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -13133,7 +13193,8 @@ window.BENCHMARK_DATA = {
           15582.189434344951,
           7904.951569777269,
           15155.92276204427,
-          16159.93144444057
+          16159.93144444057,
+          7601.722882080078
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -13145,6 +13206,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13576,7 +13638,8 @@ window.BENCHMARK_DATA = {
           582017.4493489583,
           449377.7698692909,
           746964.2779947916,
-          736745.4542518029
+          736745.4542518029,
+          429554.3186848958
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13796,7 +13859,8 @@ window.BENCHMARK_DATA = {
           719010,
           719044,
           738538,
-          740464
+          740464,
+          739415
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14015,7 +14079,8 @@ window.BENCHMARK_DATA = {
           44942.99855143229,
           25161.313983623797,
           44836.136853899276,
-          44921.04579264323
+          44921.04579264323,
+          23718.9529296875
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14231,7 +14296,8 @@ window.BENCHMARK_DATA = {
           80346,
           80970,
           80082,
-          80008
+          80008,
+          79994
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14450,7 +14516,8 @@ window.BENCHMARK_DATA = {
           391602.9814778646,
           212749.04331752233,
           359580.6168619792,
-          385532.04963030136
+          385532.04963030136,
+          200671.28181966147
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14666,7 +14733,8 @@ window.BENCHMARK_DATA = {
           572283,
           573076,
           573090,
-          573107
+          573107,
+          573121
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15910,6 +15978,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:37:14 2026 \u002B0100",
         "message": "fix: stop advising to make a private struct implementation internal (#290)"
+      },
+      {
+        "sha": "bba2f8ee31e5b39691179d019e81d9e17953f6b5",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
+        "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
       }
     ],
     "labels": [
@@ -16117,7 +16191,8 @@ window.BENCHMARK_DATA = {
       "3adbe6e7",
       "20751684",
       "47d7cde4",
-      "c2eb0006"
+      "c2eb0006",
+      "bba2f8ee"
     ],
     "datasets": [
       {
@@ -16328,7 +16403,8 @@ window.BENCHMARK_DATA = {
           299.79129188401356,
           201.70825786249978,
           265.2382357461112,
-          279.33723661104835
+          279.33723661104835,
+          251.2369601045336
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -16363,6 +16439,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16763,7 +16840,8 @@ window.BENCHMARK_DATA = {
           669.1905132702419,
           449.0135433123662,
           672.2033592632839,
-          649.8044139862061
+          649.8044139862061,
+          462.403799533844
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16775,6 +16853,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -17198,7 +17277,8 @@ window.BENCHMARK_DATA = {
           5129.340583292643,
           4751.702227456229,
           6313.839005025228,
-          6755.252198791504
+          6755.252198791504,
+          4960.147314961751
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -17282,6 +17362,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -17633,7 +17714,8 @@ window.BENCHMARK_DATA = {
           422.80907519658405,
           327.14095272336687,
           401.7604859987895,
-          429.3192598025004
+          429.3192598025004,
+          368.7293354352315
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -17645,6 +17727,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -18068,7 +18151,8 @@ window.BENCHMARK_DATA = {
           765.9419643695538,
           552.9230056762696,
           737.2925818125407,
-          742.4663223266601
+          742.4663223266601,
+          546.5783175786336
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -18080,6 +18164,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
