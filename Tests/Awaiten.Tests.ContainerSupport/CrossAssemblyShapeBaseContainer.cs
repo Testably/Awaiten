@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace Awaiten.Tests.ContainerSupport;
 
 /// <summary>A clock the base registers under a key and without one.</summary>
@@ -50,10 +53,30 @@ public sealed class ShapeBaseKettle
 	public bool Activated { get; set; }
 }
 
+/// <summary>A terminal the base connects through a private asynchronous hook and fronts with a private decorator.</summary>
+public interface IShapeBaseTerminal
+{
+	/// <summary>The terminal the decorator wraps, or <see langword="null" /> for the terminal itself.</summary>
+	IShapeBaseTerminal? Inner { get; }
+
+	/// <summary>The token the base's private asynchronous hook received, or <see langword="null" /> before it ran.</summary>
+	CancellationToken? Token { get; }
+}
+
+/// <summary>A terminal the base connects through a private asynchronous hook.</summary>
+public sealed class ShapeBaseTerminal : IShapeBaseTerminal
+{
+	/// <inheritdoc />
+	public IShapeBaseTerminal? Inner => null;
+
+	/// <inheritdoc />
+	public CancellationToken? Token { get; set; }
+}
+
 /// <summary>
 ///     A production container in a referenced assembly whose private implementation takes a keyed parameter and an
 ///     injected property, which its generated factory mirrors for a test container in another assembly, and whose
-///     private factory, instance member and hook it wraps for that container.
+///     private factory, instance member and hooks, one of them asynchronous, it wraps for that container.
 /// </summary>
 [Container]
 [Singleton<ShapeBaseUtcClock, IShapeBaseClock>(Key = "utc")]
@@ -65,8 +88,23 @@ public sealed class ShapeBaseKettle
 [Transient<ShapeBaseHighChime, IShapeBaseChime>]
 [Transient<ShapeBaseLowChime, IShapeBaseChime>]
 [Composite<AllChimes, IShapeBaseChime>]
+[Singleton<ShapeBaseTerminal, IShapeBaseTerminal>(OnActivated = nameof(ConnectAsync))]
+[Decorate<GuardedTerminal, IShapeBaseTerminal>]
 public static partial class SupportShapeBaseContainer
 {
+	private static async Task ConnectAsync(ShapeBaseTerminal terminal, CancellationToken cancellationToken)
+	{
+		await Task.Yield();
+		terminal.Token = cancellationToken;
+	}
+
+	private sealed class GuardedTerminal(IShapeBaseTerminal inner) : IShapeBaseTerminal
+	{
+		public IShapeBaseTerminal? Inner => inner;
+
+		public CancellationToken? Token => inner.Token;
+	}
+
 	private sealed class AllChimes(System.Collections.Generic.IEnumerable<IShapeBaseChime> chimes) : IShapeBaseChime
 	{
 		public int Count => System.Linq.Enumerable.Sum(chimes, chime => chime.Count);

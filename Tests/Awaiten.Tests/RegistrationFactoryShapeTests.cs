@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Awaiten.Tests.ContainerSupport;
 using Awaiten.Tests.Support;
 
@@ -228,6 +229,23 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(shop.Resolve<IShapeBaseMenu>()).IsNotNull();
 			await That(shop.Resolve<ShapeBaseKettle>().Activated).IsTrue()
 				.Because("the base wraps its private factory and hook, and the wrappers reach the test assembly through InternalsVisibleTo");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_AwaitsThePrivateAsyncHookThroughItsWrapper()
+		{
+			using CancellationTokenSource cancellation = new();
+			using SupportShapeTestContainer.Root shop = new();
+
+			IShapeBaseTerminal terminal = await shop.ResolveAsync<IShapeBaseTerminal>(cancellation.Token);
+
+			await That(terminal.GetType().Name).IsEqualTo("GuardedTerminal")
+				.Because("the base's private decorator wraps the terminal through its generated factory");
+			await That(terminal.Inner).IsExactly<ShapeBaseTerminal>();
+			await That(terminal.Token).IsEqualTo(cancellation.Token)
+				.Because("the base's internal wrapper returns its private hook's Task and forwards the token");
+			await That(shop.GetResolvability<IShapeBaseTerminal>().Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly)
+				.Because("the wrapped asynchronous hook makes the terminal, and the decorator over it, async-initialized");
 		}
 	}
 

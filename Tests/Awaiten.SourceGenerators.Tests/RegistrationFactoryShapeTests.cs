@@ -1121,4 +1121,232 @@ public class RegistrationFactoryShapeTests
 			await That(result.Diagnostics).IsEmpty();
 		}
 	}
+
+	public class AsyncMembers
+	{
+		private const string AsyncPrivateMembersBase = """
+		                                               using System.Threading;
+		                                               using System.Threading.Tasks;
+		                                               using Awaiten;
+
+		                                               namespace Lib;
+
+		                                               public interface IClock { }
+		                                               public sealed class Clock : IClock { }
+		                                               public sealed class Grinder { }
+
+		                                               [Container]
+		                                               [Singleton<IClock>(Factory = nameof(CreateClockAsync))]
+		                                               [Singleton<Grinder>(OnActivated = nameof(CalibrateAsync))]
+		                                               public static partial class Shop
+		                                               {
+		                                                   private static Task<IClock> CreateClockAsync(CancellationToken cancellationToken) => Task.FromResult<IClock>(new Clock());
+
+		                                                   private static Task CalibrateAsync(Grinder grinder, CancellationToken cancellationToken) => Task.CompletedTask;
+		                                               }
+		                                               """;
+
+		private const string ExtendingShop = """
+		                                     using System;
+		                                     using Awaiten;
+		                                     using Lib;
+
+		                                     namespace App;
+
+		                                     [Container(Extends = typeof(Shop))]
+		                                     public static partial class TestShop { }
+		                                     """;
+
+		[Test]
+		public async Task ABase_WrapsItsPrivateAsyncFactoryAndHookWithTheirTasksAndTokens()
+		{
+			GeneratorResult result = Generator.Run(Granted(AsyncPrivateMembersBase));
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
+				.Contains("internal static global::System.Threading.Tasks.Task<global::Lib.IClock> Awaiten__Factory_CreateClockAsync_*(global::System.Threading.CancellationToken @cancellationToken) => CreateClockAsync(@cancellationToken);").AsWildcard()
+				.And.Contains("internal static global::System.Threading.Tasks.Task Awaiten__Hook_OnActivated_Grinder_*(global::Lib.Grinder @grinder, global::System.Threading.CancellationToken @cancellationToken) => CalibrateAsync(@grinder, @cancellationToken);").AsWildcard()
+				.Because("a wrapper returns the member's task and forwards the token, so the extending container awaits it with its own");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_AwaitsTheWrappersWithTheResolveToken()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(AsyncPrivateMembersBase), ExtendingShop);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources.Single(source => source.Key.Contains("TestShop")).Value;
+			await That(source).Contains("await global::Lib.Shop.Awaiten__Factory_CreateClockAsync_*(cancellationToken)").AsWildcard();
+			await That(source).Contains("await global::Lib.Shop.Awaiten__Hook_OnActivated_Grinder_*(*, cancellationToken)").AsWildcard();
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_TreatsTheWrappedAsyncHookAsAsyncActivation()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(AsyncPrivateMembersBase), ExtendingShop.Replace(
+				"[Container(Extends = typeof(Shop))]",
+				"public sealed class Barista { public Barista(Func<Grinder> grinder) { } }\n\n[Container(Extends = typeof(Shop))]\n[Singleton<Barista>]"));
+
+			await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
+				.Because("the extending container reads the asynchronous activation off the wrapper's Task return type");
+		}
+
+		private const string AsyncInternalFactoryModule = """
+		                                                  using System.Threading;
+		                                                  using System.Threading.Tasks;
+		                                                  using Awaiten;
+
+		                                                  namespace Lib;
+
+		                                                  public interface IClock { }
+		                                                  internal sealed class Clock : IClock { }
+
+		                                                  [Module]
+		                                                  [Singleton<IClock>(Factory = nameof(CreateClockAsync))]
+		                                                  public static partial class GreetingModule
+		                                                  {
+		                                                      internal static Task<IClock> CreateClockAsync(CancellationToken cancellationToken) => Task.FromResult<IClock>(new Clock());
+		                                                  }
+		                                                  """;
+
+		[Test]
+		public async Task AModule_WrapsItsInternalAsyncFactoryWithItsTaskAndToken()
+		{
+			GeneratorResult result = Generator.Run(AsyncInternalFactoryModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result))
+				.Contains("public static global::System.Threading.Tasks.Task<global::Lib.IClock> Awaiten__Factory_CreateClockAsync_*(global::System.Threading.CancellationToken @cancellationToken) => CreateClockAsync(@cancellationToken);").AsWildcard();
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_AwaitsTheWrappedFactoryWithTheResolveToken()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(AsyncInternalFactoryModule, Consumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
+				.Contains("await global::Lib.GreetingModule.Awaiten__Factory_CreateClockAsync_*(cancellationToken)").AsWildcard();
+		}
+
+		private const string AsyncHookedDecoratorBase = """
+		                                                using System.Collections.Generic;
+		                                                using System.Threading;
+		                                                using System.Threading.Tasks;
+		                                                using Awaiten;
+
+		                                                namespace Lib;
+
+		                                                public interface IGreeter { }
+		                                                public sealed class Greeter : IGreeter { }
+		                                                public sealed class Farewell : IGreeter { }
+
+		                                                [Container]
+		                                                [Singleton<Greeter, IGreeter>(OnActivated = nameof(WarmUpAsync))]
+		                                                [Decorate<Shop.LoudGreeter, IGreeter>]
+		                                                public static partial class Shop
+		                                                {
+		                                                    private static Task WarmUpAsync(Greeter greeter, CancellationToken cancellationToken) => Task.CompletedTask;
+
+		                                                    private sealed class LoudGreeter : IGreeter
+		                                                    {
+		                                                        public LoudGreeter(IGreeter inner) { }
+		                                                    }
+		                                                }
+		                                                """;
+
+		[Test]
+		public async Task APrivateDecoratorOfABase_IsAsyncWhenTheServiceItWrapsIsAsyncActivated()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(AsyncHookedDecoratorBase), ExtendingShop.Replace(
+				"[Container(Extends = typeof(Shop))]",
+				"public sealed class Barista { public Barista(Func<IGreeter> greeter) { } }\n\n[Container(Extends = typeof(Shop))]\n[Singleton<Barista>]"));
+
+			await That(result.Diagnostics).Contains("*AWT120*").AsWildcard()
+				.Because("the decorator built through the base's factory wraps the asynchronously activated greeter, so it is async too");
+		}
+
+		[Test]
+		public async Task APrivateDecoratorOfABase_AwaitsTheInnerHookBeforeCallingItsFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(AsyncHookedDecoratorBase), ExtendingShop);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources.Single(source => source.Key.Contains("TestShop")).Value;
+			await That(source).Contains("await global::Lib.Shop.Awaiten__Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("global::Lib.Shop.Awaiten__Decorator_LoudGreeter_").AsWildcard();
+		}
+
+		private const string AsyncHookedCompositeBase = """
+		                                                using System.Collections.Generic;
+		                                                using System.Threading;
+		                                                using System.Threading.Tasks;
+		                                                using Awaiten;
+
+		                                                namespace Lib;
+
+		                                                public interface IGreeter { }
+		                                                public sealed class Greeter : IGreeter { }
+		                                                public sealed class Farewell : IGreeter { }
+
+		                                                [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+		                                                [Singleton<Greeter, IGreeter>(OnActivated = nameof(WarmUpAsync))]
+		                                                [Singleton<Farewell, IGreeter>]
+		                                                [Composite<Shop.AllGreeters, IGreeter>]
+		                                                public static partial class Shop
+		                                                {
+		                                                    private static Task WarmUpAsync(Greeter greeter, CancellationToken cancellationToken) => Task.CompletedTask;
+
+		                                                    private sealed class AllGreeters : IGreeter
+		                                                    {
+		                                                        public AllGreeters(IEnumerable<IGreeter> greeters) { }
+		                                                    }
+		                                                }
+		                                                """;
+
+		[Test]
+		public async Task APrivateCompositeOfABase_AwaitsTheHookOfAMemberItsFactoryReceives()
+		{
+			GeneratorResult baseResult = Generator.Run(Granted(AsyncHookedCompositeBase));
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(AsyncHookedCompositeBase), ExtendingShop);
+
+			await That(baseResult.Diagnostics).IsEmpty();
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources.Single(source => source.Key.Contains("TestShop")).Value;
+			await That(source).Contains("await global::Lib.Shop.Awaiten__Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("global::Lib.Shop.Awaiten__Composite_AllGreeters_").AsWildcard();
+		}
+
+		[Test]
+		public async Task ADecoratorOfAModuleInAnotherAssembly_AwaitsTheInnerWrappedHook()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			                                                                      using System.Threading;
+			                                                                      using System.Threading.Tasks;
+			                                                                      using Awaiten;
+
+			                                                                      namespace Lib;
+
+			                                                                      public interface IGreeter { }
+			                                                                      internal sealed class Greeter : IGreeter { }
+			                                                                      internal sealed class LoudGreeter : IGreeter
+			                                                                      {
+			                                                                          public LoudGreeter(IGreeter inner) { }
+			                                                                      }
+
+			                                                                      [Module]
+			                                                                      [Singleton<Greeter, IGreeter>(OnActivated = nameof(WarmUpAsync))]
+			                                                                      [Decorate<LoudGreeter, IGreeter>]
+			                                                                      public static partial class GreetingModule
+			                                                                      {
+			                                                                          internal static Task WarmUpAsync(Greeter greeter, CancellationToken cancellationToken) => Task.CompletedTask;
+			                                                                      }
+			                                                                      """, Consumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources.Single(source => source.Key.Contains("AppContainer")).Value;
+			await That(source).Contains("await global::Lib.GreetingModule.Awaiten__Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("global::Lib.GreetingModule.Awaiten__Decorator_LoudGreeter_").AsWildcard();
+		}
+	}
 }
