@@ -1207,7 +1207,7 @@ partial class AwaitenGenerator
 			return new HiddenMirror(new FactoryParameter(parameterType, name, KeyAttribute(FromKey(attributes)), argument), null);
 		}
 
-		return ReferencedHiddenService(type, hidden) is { } referenced
+		return ReferencedHiddenService(type, hidden) is { } referenced && (shape is null || !SymbolEqualityComparer.Default.Equals(inner, referenced))
 			? new HiddenMirror(default, new PendingDiagnostic(Diagnostics.ModuleHiddenServiceShape, [Display(referenced.ToDisplayString(FullyQualified)), Display(type.ToDisplayString(FullyQualified)),]))
 			: null;
 	}
@@ -1240,12 +1240,15 @@ partial class AwaitenGenerator
 		};
 	}
 
-	/// <summary>An internal service of the module that <paramref name="type" /> carries as a type argument or array element, or <see langword="null" />.</summary>
+	/// <summary>
+	///     An internal service with a handle, which the module or another module of its assembly registers, that
+	///     <paramref name="type" /> carries as a type argument or array element, or <see langword="null" />.
+	/// </summary>
 	private static INamedTypeSymbol? ReferencedHiddenService(ITypeSymbol type, HiddenServices hidden)
 		=> type switch
 		{
 			IArrayTypeSymbol array => ReferencedHiddenService(array.ElementType, hidden),
-			INamedTypeSymbol named => hidden.Services.ContainsKey(named)
+			INamedTypeSymbol named => hidden.Services.ContainsKey(named) || (IsHiddenService(named, hidden.Module, hidden.Compilation) && hidden.Provider(named) is not null)
 				? named
 				: named.TypeArguments.Select(argument => ReferencedHiddenService(argument, hidden)).FirstOrDefault(service => service is not null),
 			_ => null,

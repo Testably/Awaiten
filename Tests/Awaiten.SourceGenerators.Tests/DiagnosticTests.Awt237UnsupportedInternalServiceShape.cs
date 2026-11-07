@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt237UnsupportedInternalServiceShape
 	{
-		private static string Library(string parameter, bool grant = false) => $$"""
+		private static string Library(string parameter, bool grant = false, bool storage = false) => $$"""
 			using System;
 			using System.Collections.Generic;
 			using System.Threading.Tasks;
@@ -19,7 +19,7 @@ public partial class DiagnosticTests
 			internal sealed class Grinder : IGrinder { public Grinder({{parameter}} store) { } }
 
 			[Module]
-			[Singleton<BeanStore>]
+			{{(storage ? "[Singleton<BeanStore>]\npublic static partial class StorageModule { }\n\n[Module]" : "[Singleton<BeanStore>]")}}
 			[Singleton<Grinder, IGrinder>]
 			public static partial class CoffeeModule { }
 			""";
@@ -34,6 +34,18 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains($"*AWT237*'Lib.Grinder'*constructor parameter 'store'*'Lib.BeanStore'*'{display}'*").AsWildcard()
 				.Because("the generated factory cannot pass the instance on from the handle in that shape");
+		}
+
+		[Test]
+		[Arguments("Task<BeanStore>", "System.Threading.Tasks.Task<Lib.BeanStore>")]
+		[Arguments("Func<Task<BeanStore>>", "System.Func<System.Threading.Tasks.Task<Lib.BeanStore>>")]
+		public async Task AnUnsupportedShapeOfAServiceAnotherModuleRegisters_ReportsAwt237(string parameter, string display)
+		{
+			GeneratorResult result = Generator.Run(Library(parameter, storage: true));
+
+			await That(result.Diagnostics).Contains($"*AWT237*'Lib.Grinder'*constructor parameter 'store'*'Lib.BeanStore'*'{display}'*").AsWildcard()
+				.And.DoesNotContain("*AWT195*").AsWildcard()
+				.Because("the service has a handle, which the other module declares, so the shape is what the generated factory cannot pass on");
 		}
 
 		[Test]
