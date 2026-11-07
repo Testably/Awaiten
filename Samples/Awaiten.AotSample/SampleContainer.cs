@@ -3,6 +3,7 @@ using Awaiten.AotSample.Domain;
 namespace Awaiten.AotSample;
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [ImportService<Banner>]
 [Singleton<SystemClock, IClock>]
 [Transient<Report>]

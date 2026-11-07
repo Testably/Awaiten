@@ -72,13 +72,14 @@ internal sealed record RegistrationFactory(
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);
 
 /// <summary>
-///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: whether it
-///     implements <c>IAsyncInitializable</c>, <c>IDisposable</c> and <c>IAsyncDisposable</c>.
+///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: the types of
+///     its owner's <c>[AsyncInitializer&lt;T&gt;]</c> conventions it is, by their fully qualified display, and whether it
+///     implements <c>IDisposable</c> and <c>IAsyncDisposable</c>.
 /// </summary>
-internal readonly record struct ImplementationTraits(bool AsyncInitializable, bool Disposable, bool AsyncDisposable)
+internal readonly record struct ImplementationTraits(EquatableArray<string> AsyncInitializers, bool Disposable, bool AsyncDisposable)
 {
-	/// <summary>Whether the implementation implements none of the interfaces.</summary>
-	public bool IsEmpty => !AsyncInitializable && !Disposable && !AsyncDisposable;
+	/// <summary>Whether no convention matches the implementation and it implements neither interface.</summary>
+	public bool IsEmpty => AsyncInitializers.Count == 0 && !Disposable && !AsyncDisposable;
 }
 
 /// <summary>

@@ -168,14 +168,14 @@ public partial class AdapterConventionTests
 
 	public sealed class Fast : IChannel;
 
-	public sealed class Connection : IAsyncInitializable
+	public sealed class Connection : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
 
 	public sealed class SyncHandler : IHandler;
 
-	public sealed class AsyncHandler : IHandler, IAsyncInitializable
+	public sealed class AsyncHandler : IHandler, IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
@@ -196,17 +196,20 @@ public partial class AdapterConventionTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Widget>]
 	[Singleton<Connection>]
 	[Singleton<Fast, IChannel>(Key = "fast")]
 	public static partial class LocatorContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SyncHandler, IHandler>]
 	[Singleton<AsyncHandler, IHandler>]
 	public static partial class AsyncCollectionContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SyncHandler, IHandler>]
 	[Singleton<HandlerBag, IReadOnlyList<IHandler>>]
 	public static partial class SuppressedCollectionContainer;
@@ -217,6 +220,7 @@ public partial class AdapterConventionTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IChannel>]
 	[Transient<Switchboard>]
 	public static partial class ImportingContainer;

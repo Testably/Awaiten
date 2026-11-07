@@ -91,23 +91,18 @@ internal static partial class Sources
 	///     hook's <c>CancellationToken</c> parameter receives the resolve-time token.
 	/// </summary>
 	private static string HookArguments(EquatableArray<ParameterModel> parameters, InstanceModel instance, EmitContext context, bool asynchronous)
+		=> parameters.Count == 0 ? string.Empty : ", " + HookArgumentList(parameters, instance, context, asynchronous);
+
+	/// <summary>
+	///     The argument list for graph-resolved hook or async initializer parameters, as <see cref="HookArguments" />
+	///     builds it but without the leading comma.
+	/// </summary>
+	private static string HookArgumentList(EquatableArray<ParameterModel> parameters, InstanceModel instance, EmitContext context, bool asynchronous)
 	{
-		ParameterModel[] hookParameters = parameters.AsArray();
-		if (hookParameters.Length == 0)
-		{
-			return string.Empty;
-		}
-
 		string requestingType = RequestingTypeOf(instance);
-		StringBuilder arguments = new();
-		foreach (ParameterModel parameter in hookParameters)
-		{
-			arguments.Append(", ").Append(parameter.Kind == DependencyKind.CancellationToken
-				? "cancellationToken"
-				: DependencyValue(parameter, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType));
-		}
-
-		return arguments.ToString();
+		return string.Join(", ", parameters.AsArray().Select(parameter => parameter.Kind == DependencyKind.CancellationToken
+			? "cancellationToken"
+			: DependencyValue(parameter, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType)));
 	}
 
 	/// <summary>

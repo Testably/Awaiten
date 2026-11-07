@@ -113,12 +113,18 @@ public partial class ComprehensiveContainerExample
 
 	// ---- Asynchronous initialization (async-tainted) ---------------------------------------------------
 
+	// A domain interface the shop names in its [AsyncInitializer<IWarmUp>] convention; the machines never reference Awaiten.
+	public interface IWarmUp
+	{
+		Task WarmUpAsync(CancellationToken cancellationToken);
+	}
+
 	// The espresso machine must warm up before it can pour.
-	public sealed class EspressoMachine : IAsyncInitializable
+	public sealed class EspressoMachine : IWarmUp
 	{
 		public bool Warm { get; private set; }
 
-		public Task InitializeAsync(CancellationToken cancellationToken)
+		public Task WarmUpAsync(CancellationToken cancellationToken)
 		{
 			Warm = true;
 			return Task.CompletedTask;
@@ -126,11 +132,11 @@ public partial class ComprehensiveContainerExample
 	}
 
 	// The grinder calibrates itself per order (scoped, async).
-	public sealed class Grinder : IAsyncInitializable
+	public sealed class Grinder : IWarmUp
 	{
 		public bool Calibrated { get; private set; }
 
-		public Task InitializeAsync(CancellationToken cancellationToken)
+		public Task WarmUpAsync(CancellationToken cancellationToken)
 		{
 			Calibrated = true;
 			return Task.CompletedTask;
@@ -138,9 +144,9 @@ public partial class ComprehensiveContainerExample
 	}
 
 	// A fresh jug of milk is steamed to temperature each time (transient, async).
-	public sealed class MilkSteamer : IAsyncInitializable
+	public sealed class MilkSteamer : IWarmUp
 	{
-		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		public Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
 
 	// ---- Disposable and async-disposable (scope-bounded) -----------------------------------------------
@@ -429,11 +435,11 @@ public partial class ComprehensiveContainerExample
 		public string Style => "espresso";
 	}
 
-	public sealed class ColdDripPour : IPour, IAsyncInitializable
+	public sealed class ColdDripPour : IPour, IWarmUp
 	{
 		public string Style => "cold-drip";
 
-		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		public Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
 
 	// Consumes the pours as an IAsyncEnumerable<T>: because a member is async-tainted, the collection awaits
@@ -458,6 +464,7 @@ public partial class ComprehensiveContainerExample
 	// ---- The comprehensive container -------------------------------------------------------------------
 
 	[Container]
+	[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 	[Import(typeof(RoasteryModule))]
 	[ImportService<IPaymentGateway>]
 	[Singleton<Menu, IMenu>]
@@ -532,6 +539,7 @@ public partial class ComprehensiveContainerExample
 	// blocks on the async path once warmed, exercising the pragmatic sync-after-init emission (a drive-thru
 	// that serves synchronously once the machine is hot).
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 	[Singleton<EspressoMachine>]
 	public static partial class DriveThru;
 

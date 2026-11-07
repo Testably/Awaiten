@@ -1,17 +1,23 @@
 namespace Awaiten.Benchmarks.Helpers;
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<SyncSingleton>]
 [Singleton<AsyncSingleton>]
 [Scoped<SyncScoped>]
 [Transient<SyncTransient>]
 public static partial class AwaitenAsyncContainer;
 
+public interface IWarmUp
+{
+	Task WarmUpAsync(CancellationToken cancellationToken);
+}
+
 public sealed class SyncSingleton;
 
-public sealed class AsyncSingleton : IAsyncInitializable
+public sealed class AsyncSingleton : IWarmUp
 {
-	public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	public Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed class SyncScoped;

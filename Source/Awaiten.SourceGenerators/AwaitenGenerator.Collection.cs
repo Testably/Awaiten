@@ -446,7 +446,7 @@ partial class AwaitenGenerator
 			}
 		}
 
-		return ThroughGeneratedFactory(registration, factory);
+		return ThroughGeneratedFactory(registration, factory, compilation);
 	}
 
 	/// <summary>
@@ -614,9 +614,17 @@ partial class AwaitenGenerator
 		bool skipUnconstructable = false;
 		string? onActivated = null;
 		string? onRelease = null;
+		string[] asyncInitializers = [];
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
-			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
+			if (argument.Key == "AsyncInitializers" && argument.Value is { Kind: TypedConstantKind.Array, IsNull: false, } types)
+			{
+				asyncInitializers = types.Values
+					.Select(type => (type.Value as ITypeSymbol)?.ToDisplayString(FullyQualified))
+					.OfType<string>()
+					.ToArray();
+			}
+			else if (argument.Key == "Lifetime" && argument.Value.Value is int value)
 			{
 				lifetime = (Lifetime)value;
 			}
@@ -637,7 +645,7 @@ partial class AwaitenGenerator
 		// A library built before the generator reported these leaves them all unset: the traits stay unknown then,
 		// and the factory's return type decides as for any factory.
 		ImplementationTraits traits = new(
-			NamedFlag(attribute, "AsyncInitializable"),
+			new EquatableArray<string>(asyncInitializers),
 			NamedFlag(attribute, "Disposable"),
 			NamedFlag(attribute, "AsyncDisposable"));
 
@@ -1095,7 +1103,7 @@ partial class AwaitenGenerator
 				if (ContributedPair(attribute, attributeClass) is ({ } decorator, { } service))
 				{
 					closed.Add(new DecorateRegistration(
-						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited, via));
+						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited, via, module));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -1103,7 +1111,7 @@ partial class AwaitenGenerator
 			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
 			         && TryReadOpenGenericPair(openDecorator, openService, LocationInfo.From(location), diagnostics) is { } pair)
 			{
-				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location, keys, inherited));
+				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location, keys, inherited, module));
 			}
 
 			// One slot per [Decorate] attribute (well-formed or not), so open and closed decorators keep their
@@ -1244,7 +1252,7 @@ partial class AwaitenGenerator
 				if (ContributedPair(attribute, attributeClass) is ({ } composite, { } service))
 				{
 					closed.Add(new CompositeRegistration(
-						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key, via));
+						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key, via, module));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -1252,7 +1260,7 @@ partial class AwaitenGenerator
 			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
 			         && TryReadOpenGenericPair(openComposite, openService, LocationInfo.From(location), diagnostics) is { } pair)
 			{
-				open.Add(new OpenCompositeRegistration(pair.Service, pair.Mapped, lifetime, location, key));
+				open.Add(new OpenCompositeRegistration(pair.Service, pair.Mapped, lifetime, location, key, module));
 			}
 		}
 

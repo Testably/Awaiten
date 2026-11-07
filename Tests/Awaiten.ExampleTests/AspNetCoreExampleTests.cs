@@ -160,9 +160,12 @@ public partial class AspNetCoreExampleTests
 	[Container]
 	[Singleton<Greeter, IGreeter>]
 	[Scoped<RequestId>]
-	[Singleton<Report>]
+	[Singleton<Report>(OnActivated = nameof(PrepareReport))]
 	[Singleton<DisposableProbe>]
-	public static partial class WebContainer;
+	public static partial class WebContainer
+	{
+		private static Task PrepareReport(Report report, CancellationToken cancellationToken) => report.PrepareAsync(cancellationToken);
+	}
 }
 
 public interface IGreeter
@@ -181,12 +184,12 @@ public sealed class RequestId
 	public Guid Value { get; } = Guid.NewGuid();
 }
 
-// Async-initialized singleton: reached through the Task<T> projection.
-public sealed class Report : IAsyncInitializable
+// Async-initialized singleton, prepared by an asynchronous OnActivated hook: reached through the Task<T> projection.
+public sealed class Report
 {
 	public bool IsReady { get; private set; }
 
-	public Task InitializeAsync(CancellationToken cancellationToken)
+	public Task PrepareAsync(CancellationToken cancellationToken)
 	{
 		IsReady = true;
 		return Task.CompletedTask;

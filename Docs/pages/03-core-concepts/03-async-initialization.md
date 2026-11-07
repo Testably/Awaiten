@@ -1,5 +1,5 @@
 ---
-description: Give services asynchronous setup with IAsyncInitializable or an asynchronous OnActivated hook, and let the compiler stop you from using them too early.
+description: Give services asynchronous setup with an async initializer convention or an asynchronous OnActivated hook, and let the compiler stop you from using them too early.
 ---
 
 # Async initialization
@@ -10,14 +10,19 @@ Awaiten treats this as a first-class concern. It tracks which services need asyn
 
 ## Mark a service as async
 
-Implement `IAsyncInitializable`. The container calls `InitializeAsync` exactly once per instance, after construction and before the service is handed out.
+Give the setup a name in your own domain, and tell the container about it. Declare an interface (or a base class) with a method that returns `Task` or `ValueTask`. Then add `[AsyncInitializer<T>]` to the container and name the method.
 
 ```csharp
-public sealed class EspressoMachine : IAsyncInitializable
+public interface IWarmUp
+{
+    Task WarmUpAsync(CancellationToken cancellationToken);
+}
+
+public sealed class EspressoMachine : IWarmUp
 {
     public bool IsHot { get; private set; }
 
-    public async Task InitializeAsync(CancellationToken cancellationToken)
+    public async Task WarmUpAsync(CancellationToken cancellationToken)
     {
         await HeatBoilerAsync(cancellationToken);
         IsHot = true;
@@ -25,17 +30,99 @@ public sealed class EspressoMachine : IAsyncInitializable
 }
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 public static partial class CoffeeShop;
 ```
+
+This is an *async initializer convention*. Every service of the container whose implementation is an `IWarmUp` is warmed up. The container awaits the method exactly once per instance, after construction and before the service is handed out. The espresso machine never references Awaiten.
+
+The convention type is an interface or a class. The container calls the method through that type, so an explicit interface implementation or an override runs.
 
 A service with asynchronous setup is *async-tainted*. So is any service that depends on one. Awaiten follows the taint through the whole graph.
 
 ```mermaid
 flowchart RL
-    cup["Cup<br/>async-tainted"] -- "depends on" --> machine["EspressoMachine<br/>implements IAsyncInitializable"]
+    cup["Cup<br/>async-tainted"] -- "depends on" --> machine["EspressoMachine<br/>warmed up by a convention"]
     consumer["Any service that needs a Cup<br/>async-tainted"] -- "depends on" --> cup
 ```
+
+## Pass dependencies to the initializer
+
+The method's parameters are resolved from the graph, like the parameters of a constructor. A `CancellationToken` parameter receives the token you pass to `ResolveAsync`, `InitializeAsync` or `CreateScopeAsync`.
+
+```csharp
+public interface ICalibrated
+{
+    ValueTask CalibrateAsync(IClock clock, CancellationToken cancellationToken);
+}
+
+public sealed class Scale : ICalibrated
+{
+    public ValueTask CalibrateAsync(IClock clock, CancellationToken cancellationToken) => default;
+}
+
+[Container]
+[AsyncInitializer<ICalibrated>(nameof(ICalibrated.CalibrateAsync))]
+[Singleton<Clock, IClock>]
+[Singleton<Scale>]
+public static partial class CoffeeShop;
+```
+
+The parameters are dependencies of the service, so every graph check covers them: a missing service, a captive dependency, a cycle. A parameter may also be a relationship such as `Func<T>` or `Lazy<T>`. The method itself carries no Awaiten attributes. If you need `[FromKey]`, use an `OnActivated` hook instead.
+
+## Use an activation hook
+
+A convention fits a family of types. For a single registration, put the setup on the container with an `OnActivated` hook that returns `Task` or `ValueTask`.
+
+```csharp
+public sealed class PaymentTerminal : IPaymentTerminal   // no Awaiten reference
+{
+    public Task HandshakeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+[Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
+[Singleton<EspressoMachine>]
+[Singleton<PaymentTerminal, IPaymentTerminal>(OnActivated = nameof(ConnectAsync))]
+public static partial class CoffeeShop
+{
+    private static Task ConnectAsync(PaymentTerminal terminal, CancellationToken cancellationToken)
+        => terminal.HandshakeAsync(cancellationToken);
+}
+```
+
+The container awaits the hook exactly once per instance, like a convention. Every rule on this page applies to it the same way. See [Lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md#asynchronous-activation) for the hook's parameters.
+
+## Order of several initializers
+
+A service can match several conventions and also have a hook. All of them run, in a fixed order:
+
+1. The `OnActivated` hook, synchronous or asynchronous.
+2. Each matching convention, in the order the container declares them.
+
+A method runs at most once per instance, even when several conventions reach it, for example through an interface that extends another.
+
+## Which conventions apply
+
+A registration is judged by the conventions of the container or module that declares it.
+
+- A container's conventions apply to its own registrations.
+- A module's conventions apply to the module's registrations. A container's conventions do not reach into an imported module.
+- A container that [extends](../04-registration/08-extending-containers.md) a base inherits the base's conventions. They run before the container's own.
+
+```csharp
+[Module]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
+[Singleton<EspressoMachine>]
+public static partial class BarModule;
+
+[Container]
+[Import(typeof(BarModule))]
+public static partial class CoffeeShop;
+```
+
+When the module lives in another assembly, the container calls the convention itself. So the convention type and its method must be public, unless the module's assembly grants the container's assembly `InternalsVisibleTo` ([AWT234](../09-diagnostics.md#awt234)).
 
 ## Resolve it asynchronously
 
@@ -49,28 +136,6 @@ EspressoMachine machine = await shop.ResolveAsync<EspressoMachine>(cancellationT
 ```
 
 A singleton is initialized exactly once, even under concurrent resolves. Every caller gets the same warmed instance.
-
-## Keep the service free of Awaiten
-
-`IAsyncInitializable` puts an Awaiten interface on your service. To keep the service free of Awaiten, put the setup on the container instead. Name an `OnActivated` hook that returns `Task` or `ValueTask`.
-
-```csharp
-public sealed class PaymentTerminal : IPaymentTerminal   // no Awaiten reference
-{
-    public Task HandshakeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}
-
-[Container]
-[Singleton<EspressoMachine>]
-[Singleton<PaymentTerminal, IPaymentTerminal>(OnActivated = nameof(ConnectAsync))]
-public static partial class CoffeeShop
-{
-    private static Task ConnectAsync(PaymentTerminal terminal, CancellationToken cancellationToken)
-        => terminal.HandshakeAsync(cancellationToken);
-}
-```
-
-The container awaits the hook exactly once per instance, after construction and before the service is handed out. A `CancellationToken` parameter receives the token you pass to `ResolveAsync`, `InitializeAsync` or `CreateScopeAsync`. Every other rule on this page applies as if `PaymentTerminal` implemented `IAsyncInitializable`. See [Lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md#asynchronous-activation) for the hook's parameters and order.
 
 ## Warm everything up front
 
@@ -106,6 +171,7 @@ This is the point of the whole feature. In the strict default, a synchronous rel
 public sealed class Register(Func<EspressoMachine> machine);   // build error
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 [Singleton<Register>]
 public static partial class CoffeeShop;
@@ -140,7 +206,7 @@ Each shape still delivers a fully initialized machine when you await it.
 
 ## Async factories
 
-A `Factory` method may return `Task<T>`. Awaiten awaits it, and if the result is also `IAsyncInitializable`, it awaits `InitializeAsync` after. Add a `CancellationToken` parameter and the resolve-time token flows straight into it.
+A `Factory` method may return `Task<T>`. Awaiten awaits it, and then runs the conventions that match `T`. Add a `CancellationToken` parameter and the resolve-time token flows straight into it.
 
 ```csharp
 [Container]
@@ -156,6 +222,8 @@ public static partial class CoffeeShop
 }
 ```
 
+A convention matches what a factory declares it returns. A synchronous factory that returns a matching type behind a plainer one hides its initialization, which Awaiten warns about ([AWT106](../09-diagnostics.md#awt106)).
+
 ## Failures are not cached
 
 If initialization throws, the faulted result is not memoized. The next resolve builds and initializes a fresh instance. The failed instance is disposed rather than leaked, and you get the original exception unchanged. Only if its disposal throws as well do you get an `AggregateException` that holds the original failure first and the disposal failure second. A cancellation from one caller does not poison the shared singleton either. A later caller with a live token can still initialize it.
@@ -166,6 +234,7 @@ Set `AsyncSafety = AsyncSafety.SyncAfterInit` on the container to allow synchron
 
 ```csharp
 [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 public static partial class CoffeeShop;
 ```
@@ -173,7 +242,7 @@ public static partial class CoffeeShop;
 After `InitializeAsync` warms a singleton, `Resolve` returns that same warmed instance. If you resolve before warm-up, the synchronous path delegates to the memoizing async path, so you still get one instance, initialized exactly once, never a second uninitialized one. Use this when a framework forces a synchronous resolve on you.
 
 :::warning[This can block]
-A synchronous resolve of an async service that has not been warmed yet blocks the calling thread until its `InitializeAsync` finishes, because the sync path waits on the async one. Once `InitializeAsync` has warmed it, the resolve is just a cache read and does not block. So warm up at startup, and avoid a cold synchronous resolve on a thread that cannot afford to wait, or on one with a synchronization context, where blocking on async work can deadlock.
+A synchronous resolve of an async service that has not been warmed yet blocks the calling thread until its initialization finishes, because the sync path waits on the async one. Once `InitializeAsync` has warmed it, the resolve is just a cache read and does not block. So warm up at startup, and avoid a cold synchronous resolve on a thread that cannot afford to wait, or on one with a synchronization context, where blocking on async work can deadlock.
 :::
 
 ## Async disposal
@@ -188,6 +257,7 @@ Disposing a container synchronously while it owns an `IAsyncDisposable`-only ser
 
 ## Where to go next
 
+- [Lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md) for `OnActivated` and `OnRelease`.
 - [Relationships](../05-resolution/02-relationships.md) for `Func`, `Lazy`, and `Task` shapes.
 - [Owned](../06-lifetime/01-owned.md) for async disposable transients you rent and return.
 - [MS.DI bridge](../07-hosting/01-msdi-bridge.md) to run async initialization under the generic host.

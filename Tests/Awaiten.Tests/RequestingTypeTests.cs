@@ -158,7 +158,7 @@ public partial class RequestingTypeTests
 		await That(epsilon.Logger.Category).IsEqualTo(typeof(Epsilon).FullName);
 	}
 
-	public sealed class AsyncPrefix : IAsyncInitializable
+	public sealed class AsyncPrefix : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
@@ -171,6 +171,7 @@ public partial class RequestingTypeTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Prefix>]
 	[Transient<ILogger>(Factory = nameof(CreateLogger))]
 	[Transient<Alpha>]
@@ -185,6 +186,7 @@ public partial class RequestingTypeTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Prefix>]
 	[Singleton<AsyncPrefix>]
 	[Transient<ILogger>(Factory = nameof(CreateLogger))]
@@ -198,6 +200,7 @@ public partial class RequestingTypeTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Prefix>]
 	[Transient<ILogger>(Factory = nameof(CreateLogger))]
 	[Transient<Epsilon>]

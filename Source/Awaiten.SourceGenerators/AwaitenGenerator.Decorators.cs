@@ -358,6 +358,7 @@ partial class AwaitenGenerator
 			ImplInfo info = new(identity, decorator, lifetime, location, ProductionKind.Constructor, null)
 			{
 				Origin = via?.Owner,
+				DeclaredBy = chain.Ordered[linkIndex].Owner,
 				ConstructVia = via?.Call,
 				ConstructViaType = via?.ReturnType,
 				Constructor = via?.Producer,
@@ -660,6 +661,7 @@ partial class AwaitenGenerator
 		{
 			IsComposite = true,
 			Origin = composite.Via?.Owner,
+			DeclaredBy = composite.Owner,
 			ConstructVia = composite.Via?.Call,
 			ConstructViaType = composite.Via?.ReturnType,
 			Constructor = composite.Via?.Producer,

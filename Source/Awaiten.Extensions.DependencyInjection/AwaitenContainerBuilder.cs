@@ -25,7 +25,7 @@ public sealed class AwaitenContainerBuilder<TRoot>
 	/// <summary>
 	///     Adds an <see cref="IHostedService" /> that calls <c>InitializeAsync</c> on the container root on host
 	///     startup, warming its async-initialized singletons in dependency order (see
-	///     <see cref="IAsyncInitializable" />) before the host begins serving, and honoring the host's startup
+	///     <see cref="AsyncInitializerAttribute{T}" />) before the host begins serving, and honoring the host's startup
 	///     <see cref="CancellationToken" />. A container that hosts async-initialized services through MS.DI should
 	///     also opt into <c>AsyncSafety.SyncAfterInit</c> so the warmed services can then be resolved synchronously.
 	/// </summary>

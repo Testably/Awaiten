@@ -53,7 +53,8 @@ partial class AwaitenGenerator
 					decorator.DeclarationOrder,
 					decorator.Location,
 					keys,
-					decorator.Inherited));
+					decorator.Inherited,
+					Owner: decorator.Owner));
 			}
 		}
 	}
@@ -141,7 +142,8 @@ partial class AwaitenGenerator
 					composite.Composite.Construct(typeArguments),
 					composite.Lifetime,
 					composite.Location,
-					composite.Key));
+					composite.Key,
+					Owner: composite.Owner));
 			}
 		}
 	}

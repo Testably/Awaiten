@@ -190,21 +190,24 @@ public class SelfCompiledModuleRegistrationTests
 
 				namespace Lib;
 
+				public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 				public interface IPlugin { }
 				public interface IRoaster { }
 
-				internal sealed class Roaster : IPlugin, IRoaster, IAsyncInitializable, IDisposable
+				internal sealed class Roaster : IPlugin, IRoaster, IInitializable, IDisposable
 				{
 				    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 				    public void Dispose() { }
 				}
 
 				[Module]
+				[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 				[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
 				public static partial class PluginModule { }
 				""", [], []);
 
-			await That(ModuleSource(run)).Contains("AsyncInitializable = true, Disposable = true)")
+			await That(ModuleSource(run)).Contains("AsyncInitializers = new global::System.Type[] { typeof(global::Lib.IInitializable) }, Disposable = true)")
 				.Because("a consumer cannot see that the internal match is async-initialized and disposable, so the module tells it");
 		}
 	}
@@ -298,14 +301,17 @@ public class SelfCompiledModuleRegistrationTests
 
 				namespace Lib;
 
+				public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 				public interface IGreeter { }
 
-				internal sealed class Greeter : IGreeter, IAsyncInitializable
+				internal sealed class Greeter : IGreeter, IInitializable
 				{
 				    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 				}
 
 				[Module]
+				[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 				[Singleton<Greeter, IGreeter>]
 				public static partial class GreetingModule { }
 				""", """
@@ -322,8 +328,8 @@ public class SelfCompiledModuleRegistrationTests
 				""");
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("global::Awaiten.IAsyncInitializable")
-				.Because("the consumer reads the trait off the implementation's metadata and awaits its initialization");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("((global::Lib.IInitializable)created).InitializeAsync(cancellationToken)")
+				.Because("the consumer matches the module's convention against the implementation's metadata and awaits it");
 		}
 
 		[Test]
@@ -336,15 +342,18 @@ public class SelfCompiledModuleRegistrationTests
 
 				namespace Lib;
 
+				public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 				public interface IPlugin { }
 				public interface IRoaster { }
 
-				internal sealed class Roaster : IPlugin, IRoaster, IAsyncInitializable
+				internal sealed class Roaster : IPlugin, IRoaster, IInitializable
 				{
 				    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 				}
 
 				[Module]
+				[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 				[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
 				public static partial class PluginModule { }
 				""", """
@@ -361,8 +370,8 @@ public class SelfCompiledModuleRegistrationTests
 				""");
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("global::Awaiten.IAsyncInitializable")
-				.Because("the module reports the trait the consumer cannot see, so the internal match is initialized as a container scan's would be");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("((global::Lib.IInitializable)created).InitializeAsync(cancellationToken)")
+				.Because("the module records the conventions of the match the consumer cannot see, so the internal match is initialized as a container scan's would be");
 		}
 	}
 

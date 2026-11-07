@@ -16,6 +16,7 @@ namespace Awaiten.WebSample;
 ///     never blocks.
 /// </remarks>
 [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [ImportService<IConfiguration>]
 [ImportService<ILoggerFactory>]
 [Singleton<PriceList>]

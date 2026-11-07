@@ -51,13 +51,16 @@ public class GeneralTests
 
 		                                       namespace MyCode;
 
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 		                                       public sealed class A { }
-		                                       public sealed class B : IAsyncInitializable
+		                                       public sealed class B : IInitializable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<A>]
 		                                       [Singleton<B>]
 		                                       public static partial class MyContainer
@@ -1775,15 +1778,18 @@ public class GeneralTests
 
 			namespace MyCode;
 
+			public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			public interface IChannel { }
 			public sealed class Fast : IChannel { }
-			public sealed class AsyncSlow : IChannel, IAsyncInitializable
+			public sealed class AsyncSlow : IChannel, IInitializable
 			{
 			    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			}
 			public sealed class Router { public Router(Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
 
 			[Container]
+			[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			[Singleton<Fast, IChannel>(Key = "fast")]
 			[Singleton<AsyncSlow, IChannel>(Key = "slow")]
 			[Singleton<Router>]
@@ -1970,14 +1976,17 @@ public class GeneralTests
 
 			namespace MyCode;
 
+			public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			public interface IChannel { }
 			public sealed class Fast : IChannel { }
-			public sealed class AsyncSlow : IChannel, IAsyncInitializable
+			public sealed class AsyncSlow : IChannel, IInitializable
 			{
 			    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			}
 
 			[Container]
+			[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			[Singleton<Fast, IChannel>(Key = "fast")]
 			[Singleton<AsyncSlow, IChannel>(Key = "slow")]
 			public static partial class MyContainer
@@ -2034,15 +2043,18 @@ public class GeneralTests
 
 			namespace MyCode;
 
+			public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			public interface IChannel { }
 			public sealed class Fast : IChannel { }
-			public sealed class ChannelMapTask : Task<IReadOnlyDictionary<string, IChannel>>, IAsyncInitializable
+			public sealed class ChannelMapTask : Task<IReadOnlyDictionary<string, IChannel>>, IInitializable
 			{
 			    public ChannelMapTask() : base(() => null) { }
 			    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			}
 
 			[Container]
+			[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			[Singleton<Fast, IChannel>(Key = "fast")]
 			[Singleton<ChannelMapTask, Task<IReadOnlyDictionary<string, IChannel>>>]
 			public static partial class MyContainer
@@ -2537,12 +2549,15 @@ public class GeneralTests
 
 			namespace MyCode;
 
+			public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			public interface ILogger { }
-			public sealed class Db : IAsyncInitializable { public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask; }
+			public sealed class Db : IInitializable { public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask; }
 			public sealed class Logger : ILogger { public Logger(string c, Db db) { } }
 			public sealed class Alpha { public Alpha(ILogger logger) { } }
 
 			[Container]
+			[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			[Singleton<Db>]
 			[Transient<ILogger>(Factory = nameof(CreateLogger))]
 			[Transient<Alpha>]

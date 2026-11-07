@@ -16,9 +16,10 @@ namespace Awaiten.WebSample.Domain;
 /// <remarks>
 ///     Its <see cref="IConfiguration" /> comes from the host, not from the Awaiten graph — see the
 ///     <c>[ImportService&lt;IConfiguration&gt;]</c> on <see cref="WebSample.CoffeeShop" />. The class itself carries no
-///     Awaiten attribute; external-ness is declared on the container.
+///     Awaiten attribute; external-ness and its <c>[AsyncInitializer&lt;IWarmUp&gt;]</c> convention are declared on the
+///     container.
 /// </remarks>
-public sealed class PriceList : IAsyncInitializable
+public sealed class PriceList : IWarmUp
 {
 	private readonly IConfiguration _configuration;
 	private readonly Dictionary<string, decimal> _prices = new(StringComparer.OrdinalIgnoreCase);
@@ -32,7 +33,7 @@ public sealed class PriceList : IAsyncInitializable
 
 	public IReadOnlyCollection<string> Drinks => _prices.Keys;
 
-	public async Task InitializeAsync(CancellationToken cancellationToken)
+	public async Task WarmUpAsync(CancellationToken cancellationToken)
 	{
 		// Stands in for the real thing: reading a price table out of a store over the network.
 		await Task.Delay(25, cancellationToken).ConfigureAwait(false);

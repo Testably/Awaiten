@@ -434,7 +434,7 @@ public partial class LifecycleHookTests
 		public void Dispose() => Probe.Log.Add("disposed:Flaky");
 	}
 
-	public sealed class AsyncService : IAsyncInitializable
+	public sealed class AsyncService : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken)
 		{
@@ -443,7 +443,7 @@ public partial class LifecycleHookTests
 		}
 	}
 
-	public sealed class AsyncFlaky : IAsyncInitializable
+	public sealed class AsyncFlaky : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
@@ -481,6 +481,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	[Singleton<Beta>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class HookContainer
@@ -491,6 +492,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Module]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released), Fallback = Fallback.Silent)]
 	public static class FallbackHookModule
 	{
@@ -500,6 +502,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(FallbackHookModule))]
 	[Singleton<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class FallbackHookContainer
@@ -510,6 +513,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracked>(OnRelease = nameof(Release))]
 	public static partial class DisposableHookContainer
 	{
@@ -517,6 +521,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracked>(OnRelease = nameof(Release), SuppressDisposal = true)]
 	public static partial class SuppressedDisposalContainer
 	{
@@ -524,10 +529,12 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncTracked>(SuppressDisposal = true)]
 	public static partial class SuppressedAsyncDisposalContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<RentedBuffer>(Factory = nameof(Rent), OnRelease = nameof(ReturnToPool), SuppressDisposal = true)]
 	public static partial class PoolingContainer
 	{
@@ -547,6 +554,7 @@ public partial class LifecycleHookTests
 	// (its queued release closure accumulates on the root); these tests exercise root-owned release semantics,
 	// so they opt out. StrictModeTests covers the withholding itself.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class TransientHookContainer
 	{
@@ -556,6 +564,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<Alpha>(OnRelease = nameof(Released))]
 	public static partial class ScopedHookContainer
 	{
@@ -563,6 +572,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Flaky>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 	public static partial class ThrowingActivationContainer
 	{
@@ -582,6 +592,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Flaky>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 	public static partial class ThrowingTransientContainer
 	{
@@ -599,6 +610,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncFlaky>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 	public static partial class ThrowingAsyncContainer
 	{
@@ -616,6 +628,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncService>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class AsyncHookContainer
 	{
@@ -625,6 +638,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Gadget>]
 	[Singleton<Widget>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class DeferredHookContainer
@@ -635,6 +649,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Slow>(OnActivated = nameof(Activate))]
 	public static partial class ConcurrentActivationContainer
 	{
@@ -674,6 +689,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Settings>]
 	[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
 	public static partial class ActivationDependencyContainer
@@ -685,6 +701,7 @@ public partial class LifecycleHookTests
 	// Loose so PooledBuffer stays root-resolvable (see TransientHookContainer): these tests need the buffer's and
 	// the Pool's releases queued on the same owner to observe reverse creation order within one queue.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Pool>(OnRelease = nameof(ReleasePool))]
 	[Transient<PooledBuffer>(OnRelease = nameof(ReturnToPool))]
 	public static partial class PoolContainer
@@ -700,7 +717,7 @@ public partial class LifecycleHookTests
 		private static void ReleasePool(Pool pool) => Probe.Log.Add("released:Pool");
 	}
 
-	public sealed class AsyncGauge : IAsyncInitializable
+	public sealed class AsyncGauge : IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -721,6 +738,7 @@ public partial class LifecycleHookTests
 	public sealed class ScopedBuffer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncGauge>]
 	[Singleton<AsyncMachine>(OnActivated = nameof(Attach))]
 	public static partial class AsyncActivationDependencyContainer
@@ -737,6 +755,7 @@ public partial class LifecycleHookTests
 	// Loose so AsyncBuffer stays root-resolvable (see TransientHookContainer): the test observes the capture's
 	// state when the root tears down.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncGauge>]
 	[Transient<AsyncBuffer>(OnRelease = nameof(ReturnAsyncBuffer))]
 	public static partial class AsyncReleaseDependencyContainer
@@ -748,6 +767,7 @@ public partial class LifecycleHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Pool>]
 	[Scoped<ScopedBuffer>(OnRelease = nameof(ReturnScopedBuffer))]
 	public static partial class ScopedReleaseDependencyContainer

@@ -222,20 +222,23 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       // Both sides are async-initialized: an async resolver publishes its memoized task only after the
 			                                       // re-entrant resolve has returned, so the deferred cycle overflows the stack or deadlocks at runtime.
-			                                       public sealed class Left : IAsyncInitializable
+			                                       public sealed class Left : IInitializable
 			                                       {
 			                                           [Inject(Deferred = true)] public Right Right { get; set; }
 			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 			                                       }
-			                                       public sealed class Right : IAsyncInitializable
+			                                       public sealed class Right : IInitializable
 			                                       {
 			                                           [Inject(Deferred = true)] public Left Left { get; set; }
 			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Left>]
 			                                       [Singleton<Right>]
 			                                       public static partial class MyContainer
@@ -259,19 +262,22 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       // A non-cyclic deferred member of an async service is fine: it is awaited after construction and
 			                                       // never re-enters the still-building owner.
-			                                       public sealed class Dependency : IAsyncInitializable
+			                                       public sealed class Dependency : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 			                                       }
-			                                       public sealed class Consumer : IAsyncInitializable
+			                                       public sealed class Consumer : IInitializable
 			                                       {
 			                                           [Inject(Deferred = true)] public Dependency Dependency { get; set; }
 			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Dependency>]
 			                                       [Singleton<Consumer>]
 			                                       public static partial class MyContainer

@@ -30,4 +30,4 @@ A public type carries the `Awaiten` prefix by its role:
   of `Awaiten.Extensions.DependencyInjection`.
 - **Unprefixed:** the declaration DSL, that is the attributes and the enums used as their arguments (`Lifetime`,
   `ScanAs`, `Fallback`, `LifetimeSafety`), and the types users implement or name in their own classes (`Owned<T>`,
-  `IAsyncInitializable`, `IExternalResolver`).
+  `IExternalResolver`).

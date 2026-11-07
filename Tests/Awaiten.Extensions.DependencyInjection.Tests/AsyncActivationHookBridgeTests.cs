@@ -41,7 +41,7 @@ public sealed partial class AsyncActivationHookBridgeTests
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(provider.GetService<PaymentTerminal>()).IsNull()
-			.Because("the asynchronous hook leaves the terminal without a synchronous path, like an IAsyncInitializable service");
+			.Because("the asynchronous hook leaves the terminal without a synchronous path, like a service with an async initializer convention");
 
 		PaymentTerminal terminal = await provider.GetRequiredService<Task<PaymentTerminal>>();
 		await That(terminal.Connections).IsEqualTo(1);

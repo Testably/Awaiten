@@ -383,7 +383,9 @@ public partial class DiagnosticTests
 
 		                                namespace MyCode;
 
-		                                public sealed class Database : IAsyncInitializable
+		                                public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                public sealed class Database : IInitializable
 		                                {
 		                                	public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                }
@@ -394,6 +396,7 @@ public partial class DiagnosticTests
 
 		private const string StrictContainer = Services + """
 		                                                  [Container]
+		                                                  [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                                  [Singleton<Database>]
 		                                                  [Transient<Lease>]
 		                                                  public static partial class MyContainer;

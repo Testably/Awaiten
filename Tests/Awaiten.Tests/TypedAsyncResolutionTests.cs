@@ -105,7 +105,7 @@ public sealed partial class TypedAsyncResolutionTests
 
 	public interface IGate;
 
-	public sealed class Gate : IGate, IAsyncInitializable
+	public sealed class Gate : IGate, IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
@@ -115,7 +115,7 @@ public sealed partial class TypedAsyncResolutionTests
 		bool Initialized { get; }
 	}
 
-	public sealed class YieldingGate : IYieldingGate, IAsyncInitializable
+	public sealed class YieldingGate : IYieldingGate, IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -137,7 +137,7 @@ public sealed partial class TypedAsyncResolutionTests
 		public int Count { get; set; }
 	}
 
-	public sealed class FlakyGate(Attempts attempts) : IFlakyGate, IAsyncInitializable
+	public sealed class FlakyGate(Attempts attempts) : IFlakyGate, IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -156,12 +156,14 @@ public sealed partial class TypedAsyncResolutionTests
 	public sealed class Plain;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Gate, IGate>]
 	[Singleton<YieldingGate, IYieldingGate>]
 	[Singleton<Plain>]
 	public static partial class GateContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FlakyGate, IFlakyGate>]
 	[Singleton<Attempts>]
 	public static partial class FlakyContainer;

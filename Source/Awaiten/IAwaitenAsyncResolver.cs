@@ -15,7 +15,7 @@ public interface IAwaitenAsyncResolver : IAwaitenResolver
 {
 	/// <summary>
 	///     Resolves a service of the given <paramref name="serviceType" /> asynchronously, awaiting the
-	///     <see cref="IAsyncInitializable.InitializeAsync" /> of the service and its non-deferred async
+	///     asynchronous initialization of the service and its non-deferred async
 	///     dependencies (each exactly once). A service that needs no asynchronous initialization completes
 	///     synchronously. Throws if it is not registered. In the strict default this is the only way to obtain an
 	///     async-tainted service.

@@ -241,7 +241,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Conn : IAsyncInitializable, IDisposable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Conn : IInitializable, IDisposable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 			                                           public void Dispose() { }
@@ -249,6 +251,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Pool { public Pool(Func<Task<Conn>> open) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Transient<Conn>]
 			                                       [Singleton<Pool>]
 			                                       public static partial class MyContainer
@@ -273,13 +276,16 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Conn : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Conn : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Pool { public Pool(Func<Task<Conn>> open) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Transient<Conn>]
 			                                       [Singleton<Pool>]
 			                                       public static partial class MyContainer

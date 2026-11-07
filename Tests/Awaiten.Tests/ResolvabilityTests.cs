@@ -225,7 +225,7 @@ public partial class ResolvabilityTests
 		}
 	}
 
-	public sealed class Warming : IAsyncInitializable
+	public sealed class Warming : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
@@ -246,28 +246,34 @@ public partial class ResolvabilityTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Plain>]
 	[Transient<Disposable>]
 	public static partial class MixedContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Warming>]
 	public static partial class AsyncOnlyContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class EmptyContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Plain>(Key = "plain")]
 	[Singleton<Warming>(Key = "warming")]
 	[Transient<Disposable>(Key = "disposable")]
 	public static partial class KeyedContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Handler, IHandler<DerivedEvent>>]
 	public static partial class VarianceContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableHandler, IHandler<DerivedEvent>>]
 	public static partial class WithheldVarianceContainer;
 }

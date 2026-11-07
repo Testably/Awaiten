@@ -7,7 +7,7 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 
 public sealed partial class HostInitializationTests
 {
-	public sealed class AsyncResource : IAsyncInitializable
+	public sealed class AsyncResource : IInitializable
 	{
 		// Counted statically so the test observes initialization without resolving the singleton. A
 		// synchronous resolve of an AsyncSafety.SyncAfterInit service before warm-up would itself drive it.
@@ -22,6 +22,7 @@ public sealed partial class HostInitializationTests
 
 	// Pragmatic mode so the warmed async singleton can be resolved synchronously through MS.DI.
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncResource>]
 	public static partial class HostContainer;
 
@@ -60,7 +61,7 @@ public sealed partial class HostInitializationTests
 		public string Now => "noon";
 	}
 
-	public sealed class ExternalAsyncResource : IAsyncInitializable
+	public sealed class ExternalAsyncResource : IInitializable
 	{
 		internal static int InitializeCount;
 
@@ -78,6 +79,7 @@ public sealed partial class HostInitializationTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IClock>]
 	[Singleton<ExternalAsyncResource>]
 	public static partial class ExternalHostContainer;
@@ -111,6 +113,7 @@ public sealed partial class HostInitializationTests
 	public sealed class Menu;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportServices]
 	[Singleton<Menu>]
 	public static partial class ImportingHostContainer;
@@ -136,6 +139,7 @@ public sealed partial class HostInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncResource>]
 	public static partial class DoubleContainer;
 
@@ -152,7 +156,7 @@ public sealed partial class HostInitializationTests
 			.Because("TryAddEnumerable dedupes on the implementation type, and a bare service collection holds no other hosted services");
 	}
 
-	public sealed class FactoryAsyncResource : IAsyncInitializable
+	public sealed class FactoryAsyncResource : IInitializable
 	{
 		internal static int InitializeCount;
 
@@ -164,6 +168,7 @@ public sealed partial class HostInitializationTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FactoryAsyncResource>]
 	public static partial class FactoryContainer;
 

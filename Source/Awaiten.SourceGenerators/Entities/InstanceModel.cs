@@ -9,9 +9,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     exposed as, its selected constructor's parameters, its <c>[Inject]</c> properties, and disposal/async flags.
 ///     Registrations of the same implementation are coalesced into one instance, so a multi-service registration
 ///     shares a single object. <see cref="Production" /> records how it is produced: a constructor,
-///     a container Factory method, or a pre-built Instance member. The four async flags are distinct taint
-///     sources, any of which forces asynchronous resolution: <see cref="IsAsyncInitializable" /> (implements
-///     <c>IAsyncInitializable</c>), <see cref="IsAsyncFactory" /> (produced by an async factory),
+///     a container Factory method, or a pre-built Instance member. Four distinct taint sources each force
+///     asynchronous resolution: <see cref="AsyncInitializers" /> (the <c>[AsyncInitializer&lt;T&gt;]</c> conventions of
+///     its declaring scope it matches, awaited after <see cref="OnActivated" /> in that order), <see cref="IsAsyncFactory" /> (produced by an async factory),
 ///     <see cref="IsAsyncActivation" /> (its <c>OnActivated</c> hook returns <c>Task</c> or <c>ValueTask</c>), and
 ///     <see cref="IsAsyncTainted" /> (reaches one through a non-deferred dependency).
 ///     <see cref="RuntimeDisposalCheck" /> is set for a factory whose declared return type is not
@@ -44,7 +44,7 @@ internal sealed record InstanceModel(
 	bool IsReferenceType,
 	ProductionKind Production = ProductionKind.Constructor,
 	string? ProductionMember = null,
-	bool IsAsyncInitializable = false,
+	EquatableArray<AsyncInitializerModel> AsyncInitializers = default,
 	bool IsAsyncTainted = false,
 	bool IsAsyncFactory = false,
 	bool RuntimeDisposalCheck = false,
@@ -90,10 +90,11 @@ internal sealed record InstanceModel(
 
 	/// <summary>
 	///     Whether this instance is itself an async-taint source (not merely tainted through a dependency): it is
-	///     <c>IAsyncInitializable</c>, produced by an async factory, or activated by an awaited <c>OnActivated</c> hook.
-	///     Reachable only by awaiting, so a synchronous relationship over it is AWT119 rather than a transitive AWT120.
+	///     initialized by an async initializer convention, produced by an async factory, or activated by an awaited
+	///     <c>OnActivated</c> hook. Reachable only by awaiting, so a synchronous relationship over it is AWT119 rather
+	///     than a transitive AWT120.
 	/// </summary>
-	public bool IsAsyncSource => IsAsyncInitializable || IsAsyncFactory || IsAsyncActivation;
+	public bool IsAsyncSource => AsyncInitializers.Count > 0 || IsAsyncFactory || IsAsyncActivation;
 
 	/// <summary>
 	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked
@@ -127,28 +128,35 @@ internal sealed record InstanceModel(
 
 	/// <summary>
 	///     The lifecycle hooks' graph-resolved parameters (those after the leading instance parameter of the
-	///     <c>OnActivated</c> and <c>OnRelease</c> hooks), classified exactly like constructor parameters and
-	///     resolved eagerly at construction (the activation dependency inline at the call, the release dependency
-	///     captured by value). Every dependency-walking pass that visits <see cref="ConstructorParameters" /> must
-	///     also visit these, or a hook dependency escapes cycle/captive/async/argument analysis and the emitted
-	///     infrastructure it needs. The common case (no hook parameters, or only one hook contributing any) returns a
-	///     backing array without allocating; a new array is built only when both hooks contribute parameters.
+	///     <c>OnActivated</c> and <c>OnRelease</c> hooks, and those of the <see cref="AsyncInitializers" />), classified
+	///     exactly like constructor parameters and resolved eagerly at construction (the activation and initializer
+	///     dependencies inline at the call, the release dependency captured by value). Every dependency-walking pass that
+	///     visits <see cref="ConstructorParameters" /> must also visit these, or a hook dependency escapes
+	///     cycle/captive/async/argument analysis and the emitted infrastructure it needs. The common case (no hook
+	///     parameters, or only one hook contributing any) returns a backing array without allocating.
 	/// </summary>
 	public ParameterModel[] HookParameters()
 	{
 		ParameterModel[] activation = ActivationParameters.AsArray();
 		ParameterModel[] release = ReleaseParameters.AsArray();
-		if (release.Length == 0)
+		AsyncInitializerModel[] initializers = AsyncInitializers.AsArray();
+		if (initializers.Length == 0)
 		{
-			return activation;
+			if (release.Length == 0)
+			{
+				return activation;
+			}
+
+			if (activation.Length == 0)
+			{
+				return release;
+			}
 		}
 
-		if (activation.Length == 0)
-		{
-			return release;
-		}
-
-		return activation.Concat(release).ToArray();
+		return activation
+			.Concat(initializers.SelectMany(initializer => initializer.Parameters.AsArray()))
+			.Concat(release)
+			.ToArray();
 	}
 
 	/// <summary>

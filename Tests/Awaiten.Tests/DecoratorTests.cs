@@ -164,7 +164,7 @@ public partial class DecoratorTests
 	{
 		using AsyncInnerContainer.Root container = new();
 
-		// The inner is IAsyncInitializable, so the whole chain is async-tainted: reachable only through
+		// The inner is IInitializable, so the whole chain is async-tainted: reachable only through
 		// ResolveAsync (the redirect keeps the taint flowing from the inner up through the decorator).
 		await That(() => container.Resolve<IService>()).Throws<InvalidOperationException>()
 			.Because("an async-tainted decorated service is not exposed to synchronous resolution");
@@ -249,7 +249,7 @@ public partial class DecoratorTests
 	}
 
 	// An async-initializable base implementation, to check the async taint flows up through the decorator chain.
-	public sealed class AsyncReal : IService, IAsyncInitializable
+	public sealed class AsyncReal : IService, IInitializable
 	{
 		private bool _initialized;
 
@@ -333,66 +333,78 @@ public partial class DecoratorTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real, IService>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class SingleContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real, IService>]
 	[Decorate<D1, IService>]
 	[Decorate<D2, IService>]
 	public static partial class MultiContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Clock>]
 	[Transient<Real, IService>]
 	[Decorate<AuditingDecorator, IService>]
 	public static partial class ExtraDepsContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real, IService>]
 	[Transient<Consumer>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class ConsumerContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real1, IService>]
 	[Transient<Real2, IService>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class MultiImplContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Real, IService>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class SingletonLifetimeContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real, IService>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class TransientLifetimeContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real, IService>]
 	[Decorate<D2, IService>(Order = 1)]
 	[Decorate<D1, IService>]
 	public static partial class ExplicitOrderContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DerivedReal, IDerivedService>]
 	[Decorate<BaseTypedDecorator, IDerivedService>]
 	public static partial class BaseTypedInnerContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<ScopedReal, IService>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class ScopedLifetimeContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncReal, IService>]
 	[Decorate<LoggingDecorator, IService>]
 	public static partial class AsyncInnerContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DisposalLog>]
 	[Singleton<DisposableReal, IService>]
 	[Decorate<DisposableDecorator, IService>]
@@ -404,6 +416,7 @@ public partial class DecoratorTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real1, IService>]
 	[Transient<Real2, IService>(Key = "backup")]
 	[Transient<BackupConsumer>]
@@ -411,6 +424,7 @@ public partial class DecoratorTests
 	public static partial class KeyedRegistrationContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Real, IService>]
 	[Transient<Real, IService>(Key = "raw")]
 	[Decorate<LoggingDecorator, IService>]

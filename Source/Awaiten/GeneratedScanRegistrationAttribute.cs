@@ -65,10 +65,11 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	public string? OnRelease { get; set; }
 
 	/// <summary>
-	///     Whether the match implements <see cref="IAsyncInitializable" />, which the consumer cannot read off
-	///     <typeparamref name="TService" />, so it initializes the match asynchronously after construction.
+	///     The types of the module's <see cref="AsyncInitializerAttribute{T}" /> conventions the match is, which the
+	///     consumer cannot read off <typeparamref name="TService" />, so it runs those conventions after construction.
+	///     Null when no convention of the module matches.
 	/// </summary>
-	public bool AsyncInitializable { get; set; }
+	public Type[]? AsyncInitializers { get; set; }
 
 	/// <summary>
 	///     Whether the match implements <see cref="IDisposable" />, so the consumer owns its disposal like that of a

@@ -27,7 +27,7 @@ public sealed class FakeGateway : IPaymentGateway
 public static partial class TestCoffeeShop;
 ```
 
-`TestCoffeeShop` compiles as if every declaration of `CoffeeShop` were written on it: its registrations, `[Import]`s, `[Scan]`s, decorators, composites, `[ImportService]` declarations, `[InjectProperty]` entries, lifecycle hooks, `Eager` singletons and options. Only the `FakeGateway` differs. The generated `TestCoffeeShop.Root` is a container of its own: nothing at run time links it to `CoffeeShop.Root`, and resolving from it is as fast as from any other container.
+`TestCoffeeShop` compiles as if every declaration of `CoffeeShop` were written on it: its registrations, `[Import]`s, `[Scan]`s, decorators, composites, `[ImportService]` declarations, `[InjectProperty]` entries, lifecycle hooks, [async initializer conventions](../03-core-concepts/03-async-initialization.md#which-conventions-apply), `Eager` singletons and options. Only the `FakeGateway` differs. The generated `TestCoffeeShop.Root` is a container of its own: nothing at run time links it to `CoffeeShop.Root`, and resolving from it is as fast as from any other container.
 
 ## Use it in a test
 

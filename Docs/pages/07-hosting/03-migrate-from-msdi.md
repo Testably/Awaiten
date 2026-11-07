@@ -177,7 +177,7 @@ While a group is half moved, `[ImportServices]` lets every unregistered dependen
 - **Open generic closings only the host asks for.** The container generates the closings its own graph uses. A closing that only a framework requests, for example as a minimal API parameter, is not available through the bridge. See [Feature detection](./01-msdi-bridge.md#feature-detection).
 - **Options, logging and hosted services.** They stay registered in MS.DI. The container imports what it needs, such as `[ImportService(typeof(ILogger<>))]`.
 
-MS.DI has no counterpart to [async initialization](../03-core-concepts/03-async-initialization.md) either: a service that needs asynchronous setup implements `IAsyncInitializable` or gets an asynchronous `OnActivated` hook on the container, and the bridge exposes it to MS.DI as `Task<T>`.
+MS.DI has no counterpart to [async initialization](../03-core-concepts/03-async-initialization.md) either: a service that needs asynchronous setup gets an async initializer convention or an asynchronous `OnActivated` hook on the container, and the bridge exposes it to MS.DI as `Task<T>`. If your services already share a startup interface of your own, name it in `[AsyncInitializer<T>]` and keep the services as they are.
 
 ## Where to go next
 

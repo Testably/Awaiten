@@ -33,9 +33,11 @@ public partial class DiagnosticTests
 				using Awaiten;
 				using Awaiten.Extensions.DependencyInjection;
 
+				public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 				public sealed class Pooled : IDisposable { public void Dispose() { } }
 				public sealed class Ticket;
-				public sealed class AsyncPooled : IAsyncInitializable, IDisposable
+				public sealed class AsyncPooled : IInitializable, IDisposable
 				{
 					public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 					public void Dispose() { }
@@ -43,6 +45,7 @@ public partial class DiagnosticTests
 				{{types}}
 
 				{{registration}}
+				[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 				public static partial class MyContainer;
 
 				public static class Startup

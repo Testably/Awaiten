@@ -14,6 +14,7 @@ public sealed partial class BridgeGuardTests
 	public sealed class Widget;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Widget>]
 	public static partial class GuardContainer;
 
@@ -75,7 +76,7 @@ public sealed partial class BridgeGuardTests
 	}
 
 	// An async-initialized service (Task<T>-projected) that can only be disposed asynchronously.
-	public sealed class AsyncOnlyDisposableSingleton : IAsyncInitializable, IAsyncDisposable
+	public sealed class AsyncOnlyDisposableSingleton : IInitializable, IAsyncDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -83,6 +84,7 @@ public sealed partial class BridgeGuardTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncOnlyDisposableSingleton>]
 	public static partial class AsyncOnlyProjectionContainer;
 

@@ -161,6 +161,7 @@ public partial class KeyedTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	[Singleton<Router>]
@@ -182,6 +183,7 @@ public partial class KeyedTests
 
 	// Registered both unkeyed and under a key: the keyed one is reachable only through [FromKey].
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DefaultClock, IClock>]
 	[Singleton<FastChannelClock, IClock>(Key = "fast")]
 	[Singleton<Consumer>]
@@ -191,7 +193,7 @@ public partial class KeyedTests
 
 	public sealed class SyncGauge : IGauge;
 
-	public sealed class AsyncGauge : IGauge, IAsyncInitializable
+	public sealed class AsyncGauge : IGauge, IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -203,6 +205,7 @@ public partial class KeyedTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SyncGauge, IGauge>(Key = "sync")]
 	[Singleton<AsyncGauge, IGauge>(Key = "async")]
 	public static partial class AsyncKeyedContainer;
@@ -227,6 +230,7 @@ public partial class KeyedTests
 	// A container that declares no keyed registration, so its keyed dispatch has no entries: the disposed-scope
 	// guard must still run for a keyed request.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DefaultClock, IClock>]
 	public static partial class UnkeyedContainer;
 
@@ -276,6 +280,7 @@ public partial class KeyedTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Capturer>]
 	[Scoped<ScopedFast, IWork>(Key = "fast")]
 	[Transient<TransientSlow, IWork>(Key = "slow")]
@@ -319,6 +324,7 @@ public partial class KeyedTests
 	// A factory method whose parameters carry [FromKey]: the keyed selection is forwarded to the factory, so the
 	// produced type need not declare [FromKey] itself (the keyed counterpart of the factory-[Arg] shape).
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<ArabicaBean, IBean>(Key = "a")]
 	[Singleton<RobustaBean, IBean>(Key = "b")]
 	[Transient<Blend>(Factory = nameof(MakeBlend))]

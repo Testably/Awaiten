@@ -7,7 +7,7 @@
  AWT103  | Awaiten   | Error    | An implementation type is abstract or an interface
  AWT104  | Awaiten   | Error    | An implementation type has no accessible constructor
  AWT105  | Awaiten   | Error    | A singleton captures a shorter-lived scoped dependency
- AWT106  | Awaiten   | Warning  | A synchronous factory's body provably produces an IAsyncInitializable concrete type its declared return type hides
+ AWT106  | Awaiten   | Warning  | A synchronous factory's body provably produces a concrete type an async initializer convention matches, which its declared return type hides
  AWT107  | Awaiten   | Error    | An implementation is registered with conflicting lifetimes
  AWT108  | Awaiten   | Error    | A Factory registration names a member that is not a usable factory method
  AWT109  | Awaiten   | Error    | An Instance registration names a member that is not a usable instance member
@@ -126,6 +126,8 @@
  AWT230  | Awaiten   | Error    | An imported module of another assembly declares a decorator, composite or open generic registration whose type the container cannot construct, which a module does not self-compile
  AWT231  | Awaiten   | Error    | An imported module of another assembly registers an implementation the container cannot construct, for which the module generated no factory or hook wrapper because it cannot support it
  AWT232  | Awaiten   | Error    | An OnActivated hook returns Task<T> or ValueTask<T>, or an OnRelease hook returns Task or ValueTask
+ AWT233  | Awaiten   | Error    | An [AsyncInitializer<T>] names a method that is missing, overloaded, static, generic or inaccessible, does not return Task or ValueTask, or has a ref or Awaiten-attributed parameter
+ AWT234  | Awaiten   | Error    | An [AsyncInitializer<T>] convention initializes an implementation, but its type or method is not accessible where the container calls it
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.

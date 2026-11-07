@@ -154,7 +154,7 @@ public partial class EagerActivationTests
 			public void Dispose() => Probe.Disposed.Add("MonitoringClient");
 		}
 
-		public sealed class AsyncMonitoringClient : IClient, IAsyncInitializable
+		public sealed class AsyncMonitoringClient : IClient, IInitializable
 		{
 			public AsyncMonitoringClient(IClient inner)
 			{
@@ -186,34 +186,40 @@ public partial class EagerActivationTests
 		}
 
 		[Container]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedContainer;
 
 		[Container]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Singleton<Second>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedOrderContainer;
 
 		[Container]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Key = "primary", Eager = true)]
 		[Decorate<MonitoringClient, IClient>(Keys = new object?[] { "primary", })]
 		public static partial class KeyedDecoratedContainer;
 
 		[Container]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Singleton<BackupClient, IClient>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedMembersContainer;
 
 		[Container]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		[Composite<CompositeClient, IClient>(Lifetime = Lifetime.Singleton)]
 		public static partial class DecoratedCompositeContainer;
 
 		[Container]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<IClient>(Instance = nameof(Shared), Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedInstanceContainer
@@ -222,6 +228,7 @@ public partial class EagerActivationTests
 		}
 
 		[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Decorate<AsyncMonitoringClient, IClient>]
 		public static partial class AsyncDecoratedContainer;
