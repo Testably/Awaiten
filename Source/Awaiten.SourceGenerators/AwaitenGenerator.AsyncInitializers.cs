@@ -218,18 +218,17 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The conventions that run on an implementation, in declaration order: those whose type
-	///     <paramref name="matches" /> says it is, each method of <paramref name="implementation" /> once even when several
-	///     conventions reach it, at the position of the first. Without the implementation (one hidden behind a generated
-	///     factory) each convention method runs once.
+	///     The conventions that run on an implementation, in declaration order: those <paramref name="matches" /> selects,
+	///     each method of <paramref name="implementation" /> once even when several conventions reach it, at the position of
+	///     the first. Without the implementation (one hidden behind a generated factory) each convention method runs once.
 	/// </summary>
-	private static List<AsyncInitializerConvention> MatchingAsyncInitializers(IEnumerable<AsyncInitializerConvention> conventions, ITypeSymbol? implementation, Func<INamedTypeSymbol, bool> matches)
+	private static List<AsyncInitializerConvention> MatchingAsyncInitializers(IEnumerable<AsyncInitializerConvention> conventions, ITypeSymbol? implementation, Func<AsyncInitializerConvention, bool> matches)
 	{
 		List<AsyncInitializerConvention> matched = new();
 		HashSet<IMethodSymbol> methods = new(SymbolEqualityComparer.Default);
 		foreach (AsyncInitializerConvention convention in conventions)
 		{
-			if (matches(convention.Type) && methods.Add(ImplementingMethod(convention.Method, implementation).OriginalDefinition))
+			if (matches(convention) && methods.Add(ImplementingMethod(convention.Method, implementation).OriginalDefinition))
 			{
 				matched.Add(convention);
 			}
@@ -290,9 +289,9 @@ partial class AwaitenGenerator
 
 		ImplementationTraits? traits = info.Traits;
 		List<AsyncInitializerModel> models = new();
-		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, traits is null ? ownedType : null, type => traits is { } known
-			         ? known.AsyncInitializers.Contains(type.ToDisplayString(FullyQualified))
-			         : IsOfConventionType(ownedType, type)))
+		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, traits is null ? ownedType : null, convention => traits is { } known
+			         ? known.Runs(convention.Type.ToDisplayString(FullyQualified), convention.Method.Name)
+			         : IsOfConventionType(ownedType, convention.Type)))
 		{
 			if (InaccessibleAsyncInitializerPart(convention, context.ContainerSymbol, context.Compilation) is { } reason)
 			{
@@ -346,7 +345,7 @@ partial class AwaitenGenerator
 	private static DiagnosticInfo? ModuleAsyncInitializerFault(INamedTypeSymbol implementation, ModuleScanContext context, SelfCompiledSubject subject, Location? location)
 	{
 		List<AsyncInitializerConvention> conventions = DeclaredAsyncInitializers(context.Module, context.Compilation, null);
-		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, implementation, type => IsOfConventionType(implementation, type)))
+		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, implementation, convention => IsOfConventionType(implementation, convention.Type)))
 		{
 			string? reason = null;
 			if (!FitsFactorySignature(convention.Type, context))

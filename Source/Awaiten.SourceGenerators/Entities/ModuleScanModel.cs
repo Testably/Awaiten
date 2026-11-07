@@ -73,13 +73,34 @@ internal sealed record RegistrationHook(ModuleHook Hook, bool Release);
 
 /// <summary>
 ///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: the types of
-///     its owner's <c>[AsyncInitializer&lt;T&gt;]</c> conventions it is, by their fully qualified display, and whether it
-///     implements <c>IDisposable</c> and <c>IAsyncDisposable</c>.
+///     its owner's <c>[AsyncInitializer&lt;T&gt;]</c> conventions that run on it, by their fully qualified display, with
+///     the name of each convention's method at the same position in <see cref="AsyncInitializerMethods" />, and whether
+///     it implements <c>IDisposable</c> and <c>IAsyncDisposable</c>. A convention whose method another convention already
+///     runs on the implementation is left out.
 /// </summary>
-internal readonly record struct ImplementationTraits(EquatableArray<string> AsyncInitializers, bool Disposable, bool AsyncDisposable)
+internal readonly record struct ImplementationTraits(EquatableArray<string> AsyncInitializers, bool Disposable, bool AsyncDisposable, EquatableArray<string> AsyncInitializerMethods = default)
 {
 	/// <summary>Whether no convention matches the implementation and it implements neither interface.</summary>
 	public bool IsEmpty => AsyncInitializers.Count == 0 && !Disposable && !AsyncDisposable;
+
+	/// <summary>
+	///     Whether the convention of <paramref name="type" /> with <paramref name="method" /> runs on the implementation,
+	///     by its type alone when the methods are not recorded.
+	/// </summary>
+	public bool Runs(string type, string method)
+	{
+		string[] types = AsyncInitializers.AsArray();
+		string[] methods = AsyncInitializerMethods.AsArray();
+		for (int index = 0; index < types.Length; index++)
+		{
+			if (types[index] == type && (methods.Length != types.Length || methods[index] == method))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 /// <summary>

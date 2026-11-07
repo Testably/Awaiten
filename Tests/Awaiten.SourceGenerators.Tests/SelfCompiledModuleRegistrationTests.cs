@@ -207,7 +207,7 @@ public class SelfCompiledModuleRegistrationTests
 				public static partial class PluginModule { }
 				""", [], []);
 
-			await That(ModuleSource(run)).Contains("AsyncInitializers = new global::System.Type[] { typeof(global::Lib.IInitializable) }, Disposable = true, Implementation = \"Lib.Roaster\")")
+			await That(ModuleSource(run)).Contains("AsyncInitializers = new global::System.Type[] { typeof(global::Lib.IInitializable) }, AsyncInitializerMethods = new string[] { \"InitializeAsync\" }, Disposable = true, Implementation = \"Lib.Roaster\")")
 				.Because("a consumer cannot see that the internal match is async-initialized and disposable, so the module tells it");
 		}
 	}

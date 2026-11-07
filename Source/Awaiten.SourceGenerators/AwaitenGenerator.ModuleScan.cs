@@ -1128,14 +1128,12 @@ partial class AwaitenGenerator
 	private static ImplementationTraits TraitsOf(INamedTypeSymbol type, IEnumerable<AsyncInitializerConvention> conventions)
 	{
 		bool Implements(string name) => type.AllInterfaces.Any(contract => contract.ToDisplayString(FullyQualified) == name);
-		string[] initializers = MatchingAsyncInitializers(conventions, type, convention => IsOfConventionType(type, convention))
-			.Select(convention => convention.Type.ToDisplayString(FullyQualified))
-			.Distinct()
-			.ToArray();
+		List<AsyncInitializerConvention> initializers = MatchingAsyncInitializers(conventions, type, convention => IsOfConventionType(type, convention.Type));
 		return new ImplementationTraits(
-			new EquatableArray<string>(initializers),
+			new EquatableArray<string>(initializers.Select(convention => convention.Type.ToDisplayString(FullyQualified)).ToArray()),
 			Implements("global::System.IDisposable"),
-			Implements("global::System.IAsyncDisposable"));
+			Implements("global::System.IAsyncDisposable"),
+			new EquatableArray<string>(initializers.Select(convention => convention.Method.Name).ToArray()));
 	}
 
 	/// <summary>

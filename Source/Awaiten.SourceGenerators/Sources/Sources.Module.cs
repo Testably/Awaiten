@@ -236,6 +236,7 @@ internal static partial class Sources
 		// What the consumer cannot read off the match it never sees: async initialization and disposal.
 		string asyncInitializable = factory.Traits.AsyncInitializers.Count > 0
 			? $", AsyncInitializers = new global::System.Type[] {{ {string.Join(", ", factory.Traits.AsyncInitializers.Select(type => $"typeof({type})"))} }}"
+			  + $", AsyncInitializerMethods = new string[] {{ {string.Join(", ", factory.Traits.AsyncInitializerMethods.Select(method => $"\"{method}\""))} }}"
 			: string.Empty;
 		string disposable = factory.Traits.Disposable ? ", Disposable = true" : string.Empty;
 		string asyncDisposable = factory.Traits.AsyncDisposable ? ", AsyncDisposable = true" : string.Empty;

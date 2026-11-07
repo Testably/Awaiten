@@ -165,6 +165,7 @@ namespace Awaiten
     {
         public GeneratedScanRegistrationAttribute(string factory) { }
         public bool AsyncDisposable { get; set; }
+        public string[]? AsyncInitializerMethods { get; set; }
         public System.Type[]? AsyncInitializers { get; set; }
         public bool Disposable { get; set; }
         public string Factory { get; }
