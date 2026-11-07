@@ -107,26 +107,30 @@ function Release({release, latest}: {release: ChangelogRelease; latest: boolean}
             <span className={clsx(styles.badge, styles.breakingBadge)}>{summary.counts.breaking} breaking</span>
           )}
         </div>
-        <Bar summary={summary} />
+        {release.items.length > 0 && <Bar summary={summary} />}
         <Stats summary={summary} />
-        <details className={styles.changes} open={latest}>
-          <summary>{plural(release.items.length, 'change', 'changes')}</summary>
-          {categories.map(({category, label}) => {
-            const items = release.items.filter((item) => item.category === category);
-            return items.length === 0 ? null : (
-              <div key={category}>
-                <div className={clsx(styles.group, styles[`${category}Text`])}>{label} · {items.length}</div>
-                <ul className={styles.items}>
-                  {items.map((item) => (
-                    <li key={item.number}>
-                      {renderText(item.text)} <a href={item.url}>#{item.number}</a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </details>
+        {release.items.length === 0 ? (
+          <p className={styles.span}>No user-facing changes</p>
+        ) : (
+          <details className={styles.changes} open={latest}>
+            <summary>{plural(release.items.length, 'change', 'changes')}</summary>
+            {categories.map(({category, label}) => {
+              const items = release.items.filter((item) => item.category === category);
+              return items.length === 0 ? null : (
+                <div key={category}>
+                  <div className={clsx(styles.group, styles[`${category}Text`])}>{label} · {items.length}</div>
+                  <ul className={styles.items}>
+                    {items.map((item) => (
+                      <li key={item.number}>
+                        {renderText(item.text)} <a href={item.url}>#{item.number}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </details>
+        )}
       </div>
     </>
   );

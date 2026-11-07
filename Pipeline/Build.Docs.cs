@@ -165,7 +165,8 @@ partial class Build
 		=> int.TryParse(parameter[(parameter.LastIndexOf('=') + 1)..], out int size) ? size : -1;
 
 	/// <summary>
-	///     Reads the published releases with at least one user-facing change, newest first.
+	///     Reads the published releases newest first. A release without user-facing changes is kept, so that the
+	///     version numbers have no gaps; the releases before 1.0 are left out once there is a stable release.
 	/// </summary>
 	async Task<List<DocsRelease>> ReadReleases()
 	{
@@ -189,7 +190,9 @@ partial class Build
 			}
 		}
 
+		bool isStable = releases.Any(release => !release.Prerelease && MajorOf(release.TagName) > 0);
 		return releases
+			.Where(release => !isStable || MajorOf(release.TagName) > 0)
 			.OrderByDescending(release => release.PublishedAt)
 			.Select(release => new DocsRelease(
 				release.TagName.TrimStart('v'),
@@ -198,7 +201,6 @@ partial class Build
 				release.HtmlUrl,
 				CountCommits(release.Body ?? ""),
 				ReadChangelogItems(release.Body ?? "")))
-			.Where(release => release.Items.Count > 0)
 			.ToList();
 	}
 
@@ -233,6 +235,12 @@ partial class Build
 				.Where(entry => entry.Type == category.Type)
 				.Select(entry => entry.Item with {Category = category.Category,}))
 			.ToList();
+	}
+
+	static int MajorOf(string tagName)
+	{
+		Match match = Regex.Match(tagName, @"\d+");
+		return match.Success ? int.Parse(match.Value, CultureInfo.InvariantCulture) : 0;
 	}
 
 	static string Capitalize(string text)
