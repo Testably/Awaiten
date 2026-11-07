@@ -624,7 +624,7 @@ partial class AwaitenGenerator
 		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
 		if (IsOwned(type, out ITypeSymbol ownedInner))
 		{
-			return new ParameterModel(ownedInner.ToDisplayString(FullyQualified), DependencyKind.Owned, Key: key, Location: location);
+			return new ParameterModel(ownedInner.ToDisplayString(FullyQualified), DependencyKind.Owned, Key: key, Location: location, NullableService: IsNullableReference(ownedInner));
 		}
 
 		// A bare Task<T> dependency: an awaitable that resolves (and initializes) T. Task lives in
@@ -669,8 +669,12 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static ParameterModel ClassifyTask(ITypeSymbol taskResult, string? key, LocationInfo? location)
 		=> IsOwned(taskResult, out ITypeSymbol taskOwnedInner)
-			? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true)
-			: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+			? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true, NullableService: IsNullableReference(taskOwnedInner))
+			: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, NullableService: IsNullableReference(taskResult));
+
+	/// <summary>Whether a relationship's service is a nullable-annotated reference type (see <see cref="ParameterModel.NullableService" />).</summary>
+	private static bool IsNullableReference(ITypeSymbol service)
+		=> service is { IsReferenceType: true, NullableAnnotation: NullableAnnotation.Annotated, };
 
 	private static ParameterModel? ClassifyRelationship(INamedTypeSymbol named, string? key, LocationInfo? location)
 	{
@@ -678,8 +682,8 @@ partial class AwaitenGenerator
 		{
 			// Lazy<Task<T>> is the async counterpart of Lazy<T>: a memoized awaitable dependency.
 			return IsTask(named.TypeArguments[0], out ITypeSymbol lazyTaskResult)
-				? new ParameterModel(lazyTaskResult.ToDisplayString(FullyQualified), DependencyKind.LazyTask, Key: key, Location: location)
-				: new ParameterModel(named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
+				? new ParameterModel(lazyTaskResult.ToDisplayString(FullyQualified), DependencyKind.LazyTask, Key: key, Location: location, NullableService: IsNullableReference(lazyTaskResult))
+				: new ParameterModel(named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location, NullableService: IsNullableReference(named.TypeArguments[0]));
 		}
 
 		if (named is not { Name: "Func", TypeArguments.Length: >= 1, })
@@ -704,10 +708,10 @@ partial class AwaitenGenerator
 			return IsOwned(funcTaskResult, out ITypeSymbol funcTaskOwnedInner)
 				? new ParameterModel(
 					funcTaskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.FuncTask,
-					new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true)
+					new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true, NullableService: IsNullableReference(funcTaskOwnedInner))
 				: new ParameterModel(
 					funcTaskResult.ToDisplayString(FullyQualified), DependencyKind.FuncTask,
-					new EquatableArray<string>(argTypes), Key: key, Location: location);
+					new EquatableArray<string>(argTypes), Key: key, Location: location, NullableService: IsNullableReference(funcTaskResult));
 		}
 
 		// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
@@ -715,7 +719,7 @@ partial class AwaitenGenerator
 		{
 			return new ParameterModel(
 				funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
-				new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true);
+				new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true, NullableService: IsNullableReference(funcOwnedInner));
 		}
 
 		// Func<…, T> over a relationship type (nesting beyond one level) falls through to a direct dependency.

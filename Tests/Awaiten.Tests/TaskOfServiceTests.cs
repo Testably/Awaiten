@@ -49,6 +49,26 @@ public sealed partial class TaskOfServiceTests
 		public Func<Task<Owned<IStore>>> Owned => owned;
 	}
 
+	public sealed class NullableConsumer(Task<IStore?> task, Func<Task<IStore?>> factory, Lazy<Task<IStore?>> lazy, Func<Task<Owned<IStore?>>> owned)
+	{
+		public Task<IStore?> Task => task;
+
+		public Func<Task<IStore?>> Factory => factory;
+
+		public Lazy<Task<IStore?>> Lazy => lazy;
+
+		public Func<Task<Owned<IStore?>>> Owned => owned;
+	}
+
+	public sealed class SynchronousNullableConsumer(Lazy<IStore?> lazy, Owned<IStore?> owned, Func<Owned<IStore?>> ownedFactory)
+	{
+		public Lazy<IStore?> Lazy => lazy;
+
+		public Owned<IStore?> Owned => owned;
+
+		public Func<Owned<IStore?>> OwnedFactory => ownedFactory;
+	}
+
 	public sealed class KeyedConsumer([FromKey("main")] Task<IStore> task)
 	{
 		public Task<IStore> Task => task;
@@ -153,6 +173,41 @@ public sealed partial class TaskOfServiceTests
 		}
 	}
 
+	public sealed class NullableAnnotations
+	{
+		[Test]
+		public async Task AsyncRelationships_HandOutTheInitializedInstance()
+		{
+			await using NullableShop.Root shop = new();
+
+			NullableConsumer consumer = shop.Resolve<NullableConsumer>();
+			IStore? store = await consumer.Task;
+
+			await That(store?.Initialized).IsTrue()
+				.Because("a nullable-annotated service still resolves the initialized instance");
+			await That(await consumer.Factory()).IsSameAs(store);
+			await That(await consumer.Lazy.Value).IsSameAs(store);
+			await using Owned<IStore?> owned = await consumer.Owned();
+			await That(owned.Value).IsSameAs(store)
+				.Because("the singleton is shared with the owned scope");
+		}
+
+		[Test]
+		public async Task SynchronousRelationships_HandOutTheInstance()
+		{
+			await using SynchronousNullableShop.Root shop = new();
+
+			SynchronousNullableConsumer consumer = shop.Resolve<SynchronousNullableConsumer>();
+			await using Owned<IStore?> injected = consumer.Owned;
+			await using Owned<IStore?> produced = consumer.OwnedFactory();
+
+			await That(consumer.Lazy.Value).IsNotNull();
+			await That(injected.Value).IsSameAs(consumer.Lazy.Value)
+				.Because("the singleton is shared with the owned scope");
+			await That(produced.Value).IsSameAs(consumer.Lazy.Value);
+		}
+	}
+
 	public sealed class Registrations
 	{
 		[Test]
@@ -248,6 +303,17 @@ public sealed partial class TaskOfServiceTests
 	[Singleton<PlainStore, IStore>]
 	[Transient<Consumer>]
 	public static partial class SynchronousShop;
+
+	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
+	[Singleton<Store, IStore>]
+	[Transient<NullableConsumer>]
+	public static partial class NullableShop;
+
+	[Container]
+	[Singleton<PlainStore, IStore>]
+	[Transient<SynchronousNullableConsumer>]
+	public static partial class SynchronousNullableShop;
 
 	[Container]
 	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]

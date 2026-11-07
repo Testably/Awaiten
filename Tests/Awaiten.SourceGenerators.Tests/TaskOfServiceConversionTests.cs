@@ -80,6 +80,83 @@ public class TaskOfServiceConversionTests
 	}
 
 	[Test]
+	[Arguments("Singleton", "Task<IStore?>", true)]
+	[Arguments("Scoped", "Task<IStore?>", true)]
+	[Arguments("Transient", "Task<IStore?>", true)]
+	[Arguments("Singleton", "Func<Task<IStore?>>", true)]
+	[Arguments("Scoped", "Func<Task<IStore?>>", true)]
+	[Arguments("Transient", "Func<Task<IStore?>>", true)]
+	[Arguments("Singleton", "Lazy<Task<IStore?>>", true)]
+	[Arguments("Scoped", "Lazy<Task<IStore?>>", true)]
+	[Arguments("Transient", "Lazy<Task<IStore?>>", true)]
+	[Arguments("Singleton", "Task<Owned<IStore?>>", true)]
+	[Arguments("Transient", "Func<Task<Owned<IStore?>>>", true)]
+	[Arguments("Singleton", "Task<IStore?>", false)]
+	[Arguments("Scoped", "Task<IStore?>", false)]
+	[Arguments("Transient", "Task<IStore?>", false)]
+	[Arguments("Singleton", "Func<Task<IStore?>>", false)]
+	[Arguments("Scoped", "Lazy<Task<IStore?>>", false)]
+	[Arguments("Transient", "Func<Task<Owned<IStore?>>>", false)]
+	[Arguments("Singleton", "Lazy<IStore?>", false)]
+	[Arguments("Scoped", "Owned<IStore?>", false)]
+	[Arguments("Transient", "Func<Owned<IStore?>>", false)]
+	public async Task NullableAnnotatedService_CompilesWithoutWarnings(string lifetime, string parameter, bool asyncInitialized)
+	{
+		GeneratorResult result = Generator.Run("#nullable enable\n" + Source(lifetime, parameter, asyncInitialized));
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the generated relationship keeps the nullable annotation of the requested service, so no CS8620 breaks a build with warnings as errors");
+	}
+
+	[Test]
+	[Arguments("Task<Store?>")]
+	[Arguments("Func<Task<Store?>>")]
+	[Arguments("Lazy<Task<Store?>>")]
+	public async Task NullableAnnotatedImplementationType_CompilesWithoutWarnings(string parameter)
+	{
+		GeneratorResult result = Generator.Run("#nullable enable\n" + Source("Scoped", parameter, asyncInitialized: true)
+			.Replace("[Scoped<Store, IStore>]", "[Scoped<Store>]"));
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the task of the implementation is adapted to the task of its nullable-annotated type too");
+	}
+
+	[Test]
+	[Arguments(true)]
+	[Arguments(false)]
+	public async Task NullableAnnotatedServiceOfARequestingTypeFactory_CompilesWithoutWarnings(bool asyncFactory)
+	{
+		string factory = asyncFactory
+			? "private static Task<Store> Create([RequestingType] Type? requestingType) => Task.FromResult(new Store());"
+			: "private static Store Create([RequestingType] Type? requestingType) => new Store();";
+		GeneratorResult result = Generator.Run($$"""
+		                                         #nullable enable
+		                                         using Awaiten;
+		                                         using System;
+		                                         using System.Threading.Tasks;
+
+		                                         namespace MyCode;
+
+		                                         public interface IStore { }
+		                                         public sealed class Store : IStore { }
+		                                         public sealed class Consumer
+		                                         {
+		                                             public Consumer(Task<IStore?> task, Func<Task<IStore?>> factory, Lazy<Task<IStore?>> lazy) { }
+		                                         }
+
+		                                         [Container]
+		                                         [Transient<Store, IStore>(Factory = nameof(Create))]
+		                                         [Transient<Consumer>]
+		                                         public static partial class MyContainer
+		                                         {
+		                                             {{factory}}
+		                                         }
+		                                         """);
+
+		await That(result.Diagnostics).IsEmpty();
+	}
+
+	[Test]
 	public async Task SameServiceType_DoesNotConvert()
 	{
 		GeneratorResult result = Generator.Run(Source("Singleton", "Task<Store>", asyncInitialized: true)
