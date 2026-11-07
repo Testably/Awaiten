@@ -261,10 +261,56 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The reason an inherited decorator, composite or open generic registration private to the base cannot be built
+	///     by the extending container.
+	/// </summary>
+	private const string UnsupportedPrivateShape =
+		"the base generates factories only for constructed registrations of its private implementations, not for a decorator, composite or open generic registration";
+
+	/// <summary>
+	///     Rewrites every inherited registration of an implementation private to the base, or to a class containing the
+	///     base, that the extending container cannot construct, so it calls the <c>internal</c> factory the base
+	///     generates for it (see <see cref="RecordBaseFactory" />) and runs its hooks through the generated wrappers. In
+	///     the base's own assembly the container cannot see the base's generated code, so it builds the base's graph to
+	///     learn the factories, and calls the factory by its deterministic name through the constructor the factory
+	///     mirrors. In another assembly it reads the factory from the base's metadata, which needs
+	///     <c>InternalsVisibleTo</c>. Every other option of the registration stays. One the base generates no factory for
+	///     is dropped and reported with the reason: AWT226, or the AWT193 warning for a scan match. Runs right after the
+	///     replacements, so a replaced registration calls no factory, and before open generic expansion, so the mirrored
+	///     constructor seeds it.
+	/// </summary>
+	private static void BuildThroughBaseFactories(
+		Inheritance inheritance,
+		List<RawRegistration> registrations,
+		HashSet<string> constraintRejected,
+		List<DiagnosticInfo> diagnostics)
+	{
+		for (int index = 0; index < registrations.Count; index++)
+		{
+			RawRegistration registration = registrations[index];
+			if (!inheritance.BuildsThroughBaseFactory(registration))
+			{
+				continue;
+			}
+
+			if (inheritance.ThroughBaseFactory(registration, out FactoryFault fault) is { } rewritten)
+			{
+				registrations[index] = rewritten;
+				continue;
+			}
+
+			inheritance.ReportUnbuildable(registration, fault, diagnostics);
+			constraintRejected.Add(registration.ServiceType);
+			registrations.RemoveAt(index--);
+		}
+	}
+
+	/// <summary>
 	///     Reports AWT226 for every inherited registration that needs a type or member the container cannot access, and
 	///     drops it: the generated container would otherwise not compile, or silently lack a scan match its base has.
 	///     The dropped service no longer reports a missing dependency (AWT101) in its consumers, so the one cause is
-	///     reported once.
+	///     reported once. A registration built through an owner's generated factory needs neither the type nor its
+	///     constructor.
 	/// </summary>
 	private static void DropInaccessibleInherited(
 		Inheritance inheritance,
@@ -274,7 +320,7 @@ partial class AwaitenGenerator
 	{
 		registrations.RemoveAll(registration =>
 		{
-			if (!inheritance.Owns(registration.Origin) || InaccessiblePart(registration) is not { } subject)
+			if (!inheritance.Owns(registration.Origin) || registration.ConstructVia is not null || InaccessiblePart(registration) is not { } subject)
 			{
 				return false;
 			}
@@ -282,6 +328,14 @@ partial class AwaitenGenerator
 			if (registration.IsScan && PrivateToBase(registration) is { } hidden)
 			{
 				ReportPrivateScanMatch(registration, hidden);
+			}
+			else if (registration.IsSynthesized && inheritance.HiddenInBase(registration.Implementation))
+			{
+				INamedTypeSymbol definition = registration.Implementation.OriginalDefinition;
+				inheritance.ReportPrivate(
+					$"The type '{Display(registration.ImplementationType)}'",
+					new FactoryFault(UnsupportedPrivateShape, $"make '{Display(definition.ToDisplayString(FullyQualified))}' internal"),
+					diagnostics);
 			}
 			else
 			{
@@ -350,7 +404,19 @@ partial class AwaitenGenerator
 			return false;
 		}
 
-		inheritance.Report(subject, diagnostics);
+		if (inheritance.HiddenInBase(named))
+		{
+			string definition = Display(named.OriginalDefinition.ToDisplayString(FullyQualified));
+			inheritance.ReportPrivate(
+				$"The {(attributeClass.Name == "CompositeAttribute" ? "composite" : "decorator")} '{definition}'",
+				new FactoryFault(UnsupportedPrivateShape, $"make '{definition}' internal"),
+				diagnostics);
+		}
+		else
+		{
+			inheritance.Report(subject, diagnostics);
+		}
+
 		return true;
 	}
 
@@ -374,14 +440,17 @@ partial class AwaitenGenerator
 	private sealed class Inheritance
 	{
 		private readonly Compilation _compilation;
+		private readonly CancellationToken _cancellationToken;
 		private readonly HashSet<INamedTypeSymbol> _origins;
+		private BaseFactories? _baseFactories;
 
-		public Inheritance(INamedTypeSymbol container, ExtendedBase extended, List<ImportedModule> modules, Compilation compilation)
+		public Inheritance(INamedTypeSymbol container, ExtendedBase extended, List<ImportedModule> modules, Compilation compilation, CancellationToken cancellationToken)
 		{
 			Container = container;
 			Base = extended.Symbol;
 			Location = extended.Location;
 			_compilation = compilation;
+			_cancellationToken = cancellationToken;
 			_origins = new HashSet<INamedTypeSymbol>(
 				modules.Where(module => module.Inherited).Select(module => module.Symbol),
 				SymbolEqualityComparer.Default);
@@ -398,6 +467,121 @@ partial class AwaitenGenerator
 
 		/// <summary>Whether the base's assembly, not only the base itself, can access <paramref name="type" />.</summary>
 		public bool AccessibleInBaseAssembly(INamedTypeSymbol type) => _compilation.IsSymbolAccessibleWithin(type, Base.ContainingAssembly);
+
+		/// <summary>
+		///     Whether <paramref name="type" /> is private to the base, or to a class containing it, so only the base can
+		///     construct it.
+		/// </summary>
+		public bool HiddenInBase(INamedTypeSymbol type) => IsHiddenInModule(type.OriginalDefinition, Base, _compilation);
+
+		/// <summary>
+		///     Whether <paramref name="registration" /> is a constructed registration of the base itself whose implementation
+		///     is hidden in the base (see <see cref="HiddenInBase" />) and out of the container's reach, under a service the
+		///     container can name, so the container builds it through the base's generated factory.
+		/// </summary>
+		public bool BuildsThroughBaseFactory(RawRegistration registration)
+			=> SymbolEqualityComparer.Default.Equals(registration.Origin, Base)
+			   && registration is { Production: ProductionKind.Constructor, ConflictingDirectives: false, ConstructVia: null, }
+			   && HiddenInBase(registration.Implementation)
+			   && (InaccessibleType(registration.Implementation, scanned: false) is not null || InaccessibleConstructor(registration.Implementation) is not null)
+			   && (registration.ServiceSymbol is null || InaccessibleType(registration.ServiceSymbol, scanned: false) is null);
+
+		/// <summary>
+		///     <paramref name="registration" /> built through the factory the base generates for its implementation (see
+		///     <see cref="BuildThroughBaseFactories" />), or <see langword="null" /> with the <paramref name="fault" /> that
+		///     explains why the container cannot call one.
+		/// </summary>
+		public RawRegistration? ThroughBaseFactory(RawRegistration registration, out FactoryFault fault)
+		{
+			INamedTypeSymbol implementation = registration.Implementation;
+			string type = Display(implementation.ToDisplayString(FullyQualified));
+			string baseName = Display(Base.ToDisplayString(FullyQualified));
+			FactoryFault missing = new($"'{baseName}' generates no factory for it", $"make '{type}' internal");
+			fault = missing;
+			if (SymbolEqualityComparer.Default.Equals(Base.ContainingAssembly, Container.ContainingAssembly))
+			{
+				_baseFactories ??= BuildGraph(Base, _compilation, new List<DiagnosticInfo>(), _cancellationToken).Factories;
+				string name = RegistrationFactoryName(implementation);
+				if (_baseFactories.Factories.FirstOrDefault(candidate => candidate.FactoryName == name) is not { } factory)
+				{
+					fault = _baseFactories.Faults.TryGetValue(registration.ImplementationType, out FactoryFault reason) ? reason : missing;
+					return null;
+				}
+
+				string[] parameters = factory.Parameters.AsArray().Select(parameter => parameter.Type).ToArray();
+				IMethodSymbol? constructor = implementation.InstanceConstructors.FirstOrDefault(candidate =>
+					candidate.Parameters.Select(parameter => parameter.Type.ToDisplayString(FullyQualifiedWithNullability)).SequenceEqual(parameters));
+				return constructor is not null
+				       && (registration.OnActivated is null || HasHookWrapper(factory, implementation, registration.OnActivated, release: false))
+				       && (registration.OnRelease is null || HasHookWrapper(factory, implementation, registration.OnRelease, release: true))
+					? ThroughSameCompilationFactory(registration, Base, factory) with { Constructor = constructor, }
+					: null;
+			}
+
+			if (GeneratedFactory(Base, implementation, _compilation) is not { } method)
+			{
+				if (!Base.ContainingAssembly.GivesAccessTo(Container.ContainingAssembly))
+				{
+					fault = new FactoryFault(
+						$"'{baseName}' builds it through an internal generated factory",
+						$"grant the assembly of '{Display(Container.ToDisplayString(FullyQualified))}' [InternalsVisibleTo]");
+				}
+
+				return null;
+			}
+
+			return HasWrapper(registration.OnActivated, release: false) && HasWrapper(registration.OnRelease, release: true)
+				? ThroughGeneratedFactory(registration, method)
+				: null;
+
+			bool HasWrapper(string? hook, bool release)
+				=> hook is null || !Base.GetMembers(RegistrationHookWrapperName(implementation, release, hook)).IsEmpty;
+		}
+
+		/// <summary>
+		///     Reports why the container cannot build an inherited registration through the base's generated factory:
+		///     AWT226, or the AWT193 warning for a scan match, so a scan never fails the build.
+		/// </summary>
+		public void ReportUnbuildable(RawRegistration registration, FactoryFault fault, List<DiagnosticInfo> diagnostics)
+		{
+			if (!registration.IsScan)
+			{
+				ReportPrivate($"The type '{Display(registration.ImplementationType)}'", fault, diagnostics);
+				return;
+			}
+
+			DiagnosticInfo diagnostic = new(
+				Diagnostics.ScanTypePrivate,
+				LocationInfo.From(Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					$"the extending container '{Display(Container.ToDisplayString(FullyQualified))}' cannot build it, because {fault.Reason}",
+					fault.Remedy,
+				]));
+			if (!diagnostics.Contains(diagnostic))
+			{
+				diagnostics.Add(diagnostic);
+			}
+		}
+
+		/// <summary>Reports AWT226 for <paramref name="subject" />, private to the base, with the reason it cannot be built, once.</summary>
+		public void ReportPrivate(string subject, FactoryFault fault, List<DiagnosticInfo> diagnostics)
+		{
+			DiagnosticInfo diagnostic = new(
+				Diagnostics.InheritedPrivateImplementation,
+				LocationInfo.From(Location),
+				new EquatableArray<string>([
+					subject,
+					Display(Container.ToDisplayString(FullyQualified)),
+					Display(Base.ToDisplayString(FullyQualified)),
+					fault.Reason,
+					fault.Remedy,
+				]));
+			if (!diagnostics.Contains(diagnostic))
+			{
+				diagnostics.Add(diagnostic);
+			}
+		}
 
 		/// <summary>Reports AWT226 for <paramref name="subject" />, once.</summary>
 		public void Report(string subject, List<DiagnosticInfo> diagnostics)

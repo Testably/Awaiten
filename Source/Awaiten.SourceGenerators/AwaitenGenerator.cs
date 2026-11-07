@@ -281,7 +281,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			hasBaseErrors,
 			graph.External.ImportServices,
 			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Closed),
-			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Open));
+			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Open),
+			new EquatableArray<RegistrationFactory>(graph.Factories.Factories.ToArray()));
 	}
 
 	/// <summary>
@@ -447,7 +448,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, List<InjectPropertyEntry>> InjectProperties,
 		List<(string ServiceType, INamedTypeSymbol Symbol)> DispatchCandidates,
 		List<DiagnosticInfo> Diagnostics,
-		ServedTypes ServedTypes);
+		ServedTypes ServedTypes,
+		BaseFactories? Factories);
 
 	/// <summary>
 	///     The mutable coalesced graph state the decorator-chain and composite builders rewrite in place: the
@@ -485,8 +487,12 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		if (ResolveExtends(containerSymbol, diagnostics) is { } extended)
 		{
 			modules = InheritBase(extended, modules);
-			inheritance = new Inheritance(containerSymbol, extended, modules, compilation);
+			inheritance = new Inheritance(containerSymbol, extended, modules, compilation, cancellationToken);
 		}
+
+		// Only a container that extends none can be extended, so only such a container builds factories for its private
+		// implementations (see RecordBaseFactory).
+		BaseFactories? factories = ExtendsTarget(containerSymbol, out _) is null ? new BaseFactories() : null;
 
 		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
 		// instead of AWT101. Computed up front because it widens constructor selection everywhere. A module can
@@ -603,7 +609,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// closings of an open import are checked once the instances are built (ReportOpenExternalServices).
 		ReportContradictingExternalServices(externalServiceTypes.Closed, serviceToImpl, containerSymbol, diagnostics);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, CollectDispatchCandidates(raw, serviceToImpl), diagnostics, ServedTypesOf(raw, serviceMembers, keyedMembers));
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, CollectDispatchCandidates(raw, serviceToImpl), diagnostics, ServedTypesOf(raw, serviceMembers, keyedMembers), factories);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
@@ -687,7 +693,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			varianceCandidateTypes.Add(serviceType);
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections, external, openServices);
+		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections, external, openServices, factories ?? new BaseFactories());
 	}
 
 	/// <summary>

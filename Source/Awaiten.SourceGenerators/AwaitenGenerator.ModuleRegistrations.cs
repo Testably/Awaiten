@@ -324,16 +324,6 @@ partial class AwaitenGenerator
 		return hash;
 	}
 
-	/// <summary>
-	///     The generated factory of a self-compiled registration on an imported module of another assembly, or
-	///     <see langword="null" /> when the module carries none (built without the generator, or by a version
-	///     predating self-compiled registrations).
-	/// </summary>
-	private static IMethodSymbol? SelfCompiledFactory(INamedTypeSymbol module, INamedTypeSymbol implementation)
-		=> module.GetMembers(RegistrationFactoryName(implementation))
-			.OfType<IMethodSymbol>()
-			.FirstOrDefault(method => method is { IsStatic: true, DeclaredAccessibility: Accessibility.Public, ReturnType: INamedTypeSymbol, });
-
 	/// <summary>Whether the container's compilation can construct <paramref name="implementation" /> itself.</summary>
 	private static bool CanConstruct(INamedTypeSymbol implementation, Compilation compilation)
 		=> implementation.InstanceConstructors.Any(constructor => compilation.IsSymbolAccessibleWithin(constructor, compilation.Assembly));

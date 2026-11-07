@@ -111,8 +111,10 @@ partial class AwaitenGenerator
 		// above (the caller owns it, so activation/release do not apply). A hook's parameters after the instance are
 		// graph dependencies (AWT101 when unregistered, AWT189 for a runtime [Arg], AWT191 for a Func/Lazy on the
 		// release hook), resolved like a constructor's.
-		(string? onActivated, EquatableArray<ParameterModel> activationParameters) = ResolveHook(info, info.OnActivated, release: false, context);
-		(string? onRelease, EquatableArray<ParameterModel> releaseParameters) = ResolveHook(info, info.OnRelease, release: true, context);
+		(string? onActivated, EquatableArray<ParameterModel> activationParameters, IMethodSymbol? activationHook) = ResolveHook(info, info.OnActivated, release: false, context);
+		(string? onRelease, EquatableArray<ParameterModel> releaseParameters, IMethodSymbol? releaseHook) = ResolveHook(info, info.OnRelease, release: true, context);
+
+		RecordBaseFactory(new BaseFactoryRequest(info, producer, resolverType, members, activationHook, releaseHook), context);
 
 		// An implementation hidden in its module is built through the module's factory, which returns its service.
 		bool viaModuleFactory = info.ConstructVia is not null;
@@ -590,6 +592,11 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		if (info.Constructor is { } mirrored)
+		{
+			return mirrored;
+		}
+
 		// A same-compilation module-scan match builds through the greediest accessible constructor - the one the
 		// module's generated factory mirrors - so the match constructs identically wherever the module is
 		// imported from, instead of quietly falling back to a smaller constructor the local graph happens to satisfy.
@@ -635,7 +642,7 @@ partial class AwaitenGenerator
 	///     generic overload beside another usable overload is an overload collision, AWT190, since settling the
 	///     closings would still leave two usable overloads.
 	/// </summary>
-	private static (string? Hook, EquatableArray<ParameterModel> Parameters) ResolveHook(
+	private static (string? Hook, EquatableArray<ParameterModel> Parameters, IMethodSymbol? Method) ResolveHook(
 		ImplInfo info,
 		string? hookName,
 		bool release,
@@ -643,17 +650,18 @@ partial class AwaitenGenerator
 	{
 		if (hookName is null)
 		{
-			return (null, default);
+			return (null, default, null);
 		}
 
 		// The hook's own origin (the registration that named it), not the implementation's winning Origin: two
 		// scan registrations with different origins can fill the two slots, and each name binds only on its owner.
 		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
 
-		// An implementation hidden in its module keeps a hook only when its module generated the wrapper (see
-		// SelfCompiledRegistration and SameCompilationScanRegistration), so the module's own resolution found exactly
-		// one hook; the container runs that hook's wrapper, which takes the factory's return type and passes the
-		// module's private type on.
+		// An implementation hidden in its module or base container keeps a hook only when its owner generated the
+		// wrapper (see SelfCompiledRegistration, SameCompilationScanRegistration and BuildThroughBaseFactories), so the
+		// owner's own resolution found exactly one hook; the container runs that hook's wrapper, which takes the
+		// factory's return type and passes the private type on. A base container wraps a scan match's hooks like an
+		// explicit registration's, since it generates one factory per implementation.
 		if (info.ConstructVia is not null && origin is not null)
 		{
 			List<INamedTypeSymbol>? markers = null;
@@ -664,8 +672,10 @@ partial class AwaitenGenerator
 
 			IMethodSymbol hook = CollectModuleHookOverloads(
 				info.Symbol, hookName, markers, new ModuleScanContext(origin, context.Compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal))).Matches[0];
-			string wrapper = info.IsScan ? ModuleHookWrapperName(info.Symbol, release) : RegistrationHookWrapperName(info.Symbol, release, hookName);
-			return ($"{origin.ToDisplayString(FullyQualified)}.{wrapper}", ClassifyHookParameters(hook, info, release, context));
+			string wrapper = info.IsScan && !HasAwaitenAttribute(origin.GetAttributes(), "ContainerAttribute")
+				? ModuleHookWrapperName(info.Symbol, release)
+				: RegistrationHookWrapperName(info.Symbol, release, hookName);
+			return ($"{origin.ToDisplayString(FullyQualified)}.{wrapper}", ClassifyHookParameters(hook, info, release, context), hook);
 		}
 
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) = CollectHookOverloads(
@@ -678,7 +688,7 @@ partial class AwaitenGenerator
 
 		if (matches.Count == 1 && ambiguousMethods.Count == 0)
 		{
-			return (QualifiedHook(origin, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
+			return (QualifiedHook(origin, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context), matches[0]);
 		}
 
 		// A generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload, is
@@ -696,7 +706,7 @@ partial class AwaitenGenerator
 					hookName,
 					string.Join(", ", ambiguousMethods[0].Select(form => Display(form.ToDisplayString(FullyQualified)))),
 				])));
-			return (null, default);
+			return (null, default, null);
 		}
 
 		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
@@ -708,7 +718,7 @@ partial class AwaitenGenerator
 			matches.Count + ambiguousMethods.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
 			info.Location,
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(origin),])));
-		return (null, default);
+		return (null, default, null);
 	}
 
 	/// <summary>

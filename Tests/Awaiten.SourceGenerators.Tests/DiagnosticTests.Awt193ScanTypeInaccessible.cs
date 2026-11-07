@@ -385,7 +385,7 @@ public partial class DiagnosticTests
 			}
 
 			[Test]
-			public async Task MatchPrivateToAnExtendedBase_IsAWarningInTheExtendingContainer()
+			public async Task MatchPrivateToAnExtendedBase_DoesNotReport()
 			{
 				GeneratorResult result = Generator.Run("""
 				                                       using Awaiten;
@@ -407,10 +407,10 @@ public partial class DiagnosticTests
 				                                       }
 				                                       """);
 
-				await That(result.Diagnostics).HasCount(1);
-				await That(result.Diagnostics).Contains("*warning AWT193*'MyCode.Shop.FakePlugin'*the extending container 'MyCode.TestShop' cannot reach it*make 'MyCode.Shop.FakePlugin' internal*").AsWildcard()
-					.Because("the base registers its private match, which the extending container cannot construct, and a scan never turns its former skip into the AWT226 error");
+				await That(result.Diagnostics).IsEmpty()
+					.Because("the extending container builds the base's private match through the factory the base generates for it");
 				await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("new global::MyCode.Shop.FakePlugin()");
+				await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Awaiten__Registration_FakePlugin_");
 			}
 
 			[Test]

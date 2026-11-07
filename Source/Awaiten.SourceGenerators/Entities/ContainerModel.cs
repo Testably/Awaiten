@@ -9,7 +9,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     base reports, so the graph is still broken and only its shell is emitted. <see cref="ImportServices" />,
 ///     <see cref="ImportedServices" /> and <see cref="ImportedDefinitions" /> are the types the container leaves to
 ///     the host: <c>[ImportServices]</c>, the closed <c>[ImportService]</c> types and the unbound generic
-///     definitions of the open ones.
+///     definitions of the open ones. <see cref="Factories" /> are the factories the container generates for its private
+///     implementations, so a container that extends it can build them.
 /// </summary>
 internal sealed record ContainerModel(
 	string? Namespace,
@@ -27,7 +28,8 @@ internal sealed record ContainerModel(
 	bool HasBaseErrors = false,
 	bool ImportServices = false,
 	EquatableArray<string> ImportedServices = default,
-	EquatableArray<string> ImportedDefinitions = default)
+	EquatableArray<string> ImportedDefinitions = default,
+	EquatableArray<RegistrationFactory> Factories = default)
 {
 	public bool Imports => ImportServices || ImportedServices.Count > 0 || ImportedDefinitions.Count > 0;
 

@@ -648,7 +648,10 @@ partial class AwaitenGenerator
 
 		compositeInfo = new ImplInfo(
 			identity, composite.Composite, composite.Lifetime,
-			LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
+			LocationInfo.From(composite.Location), ProductionKind.Constructor, null)
+		{
+			IsComposite = true,
+		};
 		byImpl.Add(identity, compositeInfo);
 		implOrder.Add(compositeInfo);
 		return compositeInfo;

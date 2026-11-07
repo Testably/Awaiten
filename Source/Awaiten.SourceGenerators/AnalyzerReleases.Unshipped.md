@@ -122,7 +122,7 @@
  AWT223  | Awaiten   | Error    | A container names itself in Extends
  AWT224  | Awaiten   | Error    | The base named by Extends itself extends another container
  AWT225  | Awaiten   | Error    | A container with Extends sets AsyncSafety or LifetimeSafety, which it inherits from its base
- AWT226  | Awaiten   | Error    | A type or member a container inherits through Extends is not accessible from it
+ AWT226  | Awaiten   | Error    | A type or member a container inherits through Extends is not accessible from it, or a private implementation of the base it cannot build through the base's generated factory
  AWT230  | Awaiten   | Error    | An imported module of another assembly declares a decorator, composite or open generic registration whose type the container cannot construct, which a module does not self-compile
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

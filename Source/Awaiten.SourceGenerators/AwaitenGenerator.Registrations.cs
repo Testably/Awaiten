@@ -22,6 +22,9 @@ namespace Awaiten.SourceGenerators;
 ///     <c>Traits</c> describes a self-compiled implementation produced by a module's generated factory, which the
 ///     factory's return type hides: <c>TraitsExact</c> when read off the implementation itself (a module
 ///     registration), else only the interfaces a module scan reported, so a hidden disposable is still checked at run time.
+///     <c>ConstructVia</c> names the generated factory of the module or base container that builds an implementation
+///     the container cannot construct, and <c>Constructor</c> the constructor that factory mirrors when it is fixed
+///     (a base container's factory mirrors the constructor the base picked).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -57,7 +60,8 @@ internal sealed record RawRegistration(
 	ImplementationTraits? Traits = null,
 	bool TraitsExact = false,
 	string? ConstructVia = null,
-	string? ConstructViaType = null);
+	string? ConstructViaType = null,
+	IMethodSymbol? Constructor = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -175,6 +179,9 @@ partial class AwaitenGenerator
 		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
 		public bool IsScan { get; init; }
 
+		/// <summary>Whether this is the instance of a <c>[Composite]</c>.</summary>
+		public bool IsComposite { get; init; }
+
 		/// <summary>
 		///     Whether construction picks the greediest accessible constructor unconditionally (the one a
 		///     cross-assembly module's generated factory mirrors) instead of the registered-services-aware pick.
@@ -278,6 +285,12 @@ partial class AwaitenGenerator
 
 		/// <inheritdoc cref="ConstructVia" />
 		public string? ConstructViaType { get; init; }
+
+		/// <summary>
+		///     The constructor the generated factory behind <see cref="ConstructVia" /> mirrors, when the factory fixes it, or
+		///     <see langword="null" /> to select one as usual.
+		/// </summary>
+		public IMethodSymbol? Constructor { get; init; }
 
 		public List<ServiceKey> Services { get; }
 
