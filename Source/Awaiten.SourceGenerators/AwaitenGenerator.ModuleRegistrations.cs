@@ -85,7 +85,10 @@ partial class AwaitenGenerator
 		{
 			if (!_scans.TryGetValue(module, out List<ModuleScanExpansion>? scans))
 			{
-				_scans[module] = scans = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None);
+				// Without a grant, the module's scans take internal services through handles, which this container builds itself.
+				_scans[module] = scans = IsExternallyAccessible(module) && ReceivesGeneratedMembers(module) && !GrantsInternalsVisibleTo(_compilation.Assembly)
+					? InternalScanFactories(module, _compilation, CancellationToken.None)
+					: CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None);
 			}
 
 			return scans;
@@ -937,6 +940,22 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string RegistrationFactoryName(INamedTypeSymbol implementation)
 		=> $"Registration_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>
+	///     The matches of the scans of a module another assembly can name, as a container in the module's own assembly
+	///     reads them: their factories may take the internal services the public factories take through handles, which
+	///     such a container builds itself, so it constructs such a match directly. A match private to the module, which
+	///     only a factory can build, gets the name of the internal factory the module generates for it when it takes
+	///     such a service.
+	/// </summary>
+	private static List<ModuleScanExpansion> InternalScanFactories(INamedTypeSymbol module, Compilation compilation, CancellationToken cancellationToken)
+		=> CollectModuleScanFactories(module, compilation, new List<DiagnosticInfo>(), cancellationToken, internalFactories: true)
+			.Select(expansion => expansion.Factory.Skip is null
+			                     && IsHiddenInModule(expansion.Implementation, module, compilation)
+			                     && !TryMirrorFactoryParameters(expansion.Implementation, new ModuleScanContext(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal)), null, ScanSubject(expansion.Factory.ImplementationType), out _)
+				? expansion with { Factory = expansion.Factory with { FactoryName = "Internal" + expansion.Factory.FactoryName, }, }
+				: expansion)
+			.ToList();
 
 	/// <summary>A deterministic name for the internal factory of an implementation private to the module (see <see cref="InternalRegistrationFactory" />).</summary>
 	private static string InternalRegistrationFactoryName(INamedTypeSymbol implementation)

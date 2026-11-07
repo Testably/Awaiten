@@ -30,17 +30,20 @@ partial class AwaitenGenerator
 	///     Reuses the container scan's candidate discovery, filters and their diagnostics
 	///     (AWT138/AWT143/AWT172/AWT173/AWT174/AWT183/AWT184/AWT185), and adds AWT195/AWT196/AWT197/AWT200/AWT202
 	///     for the self-compilation constraints (accessible parameters, a single accessible exposure per match, no
-	///     injection metadata the factory could not mirror, the module's own assembly only).
+	///     injection metadata the factory could not mirror, the module's own assembly only). With
+	///     <paramref name="internalFactories" />, the factories may take any type the module's assembly can name, as a
+	///     container there or in an assembly granted <c>InternalsVisibleTo</c> calls them (see <see cref="InternalScanFactories" />).
 	/// </summary>
 	private static List<ModuleScanExpansion> CollectModuleScanFactories(
 		INamedTypeSymbol module,
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics,
 		CancellationToken cancellationToken,
-		HiddenServices? hidden = null)
+		HiddenServices? hidden = null,
+		bool internalFactories = false)
 	{
 		List<ModuleScanExpansion> factories = new();
-		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden);
+		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden, internalFactories);
 
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
@@ -455,6 +458,14 @@ partial class AwaitenGenerator
 		// record: the reported failure no longer describes the slot, so a still-later failure over a further
 		// widened union is a new outcome and must report, not hide behind the stale entry.
 		string attempt = matchType.ToDisplayString(FullyQualified) + "\0" + (release ? "OnRelease" : "OnActivated") + "\0" + hookName;
+
+		// The hooks of a match private to the module serve its internal factory too (see InternalScanFactories), whose
+		// callers register no handles, so they take none.
+		if (IsHiddenInModule(matchType, context.Module, context.Compilation))
+		{
+			context = context with { Hidden = null, };
+		}
+
 		ResolvedModuleHook? resolved = ResolveModuleHookCore(
 			new ModuleHookRequest(matchType, hookName, match.Location, release, ModuleHookWrapperName(matchType, release), ScanSubject(matchType.ToDisplayString(FullyQualified)), FriendsCanConstruct(matchType, context)),
 			closedMarkers,
@@ -785,6 +796,8 @@ partial class AwaitenGenerator
 		ScanMarkerInfo markerInfo,
 		ModuleScanContext context)
 	{
+		// The exposures are what a consumer in another assembly resolves, so an internal factory exposes the same ones.
+		context = context with { Internal = false, };
 		List<INamedTypeSymbol> exposures = new();
 		if (match.RegisterSelf && FitsFactorySignature(type, context))
 		{

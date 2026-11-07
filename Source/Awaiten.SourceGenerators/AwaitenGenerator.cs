@@ -213,6 +213,15 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			wrappers.RemoveAll(wrapper => registrations.Any(registration => registration.Hooks.AsArray().Any(hook => hook.Hook.WrapperName == wrapper.Name)));
 			skipped = skipped.GroupBy(entry => entry.MarkerName, StringComparer.Ordinal).Select(group => group.First()).ToList();
 			registrations.AddRange(contributions);
+			if (factories.Any(factory => factory.Skip is null && factory.Parameters.AsArray().Any(parameter => parameter.Argument is not null)))
+			{
+				// A private match whose factory takes a handle gets an internal factory that takes the service directly,
+				// which a container in the module's own assembly calls, since it builds the internal services itself.
+				registrations.AddRange(InternalScanFactories(moduleSymbol, compilation, cancellationToken)
+					.Where(expansion => factories.Any(factory => factory.Skip is null && "Internal" + factory.FactoryName == expansion.Factory.FactoryName))
+					.Select(expansion => new RegistrationFactory(expansion.Factory.FactoryName, expansion.Factory.ServiceType, expansion.Factory.ImplementationType, expansion.Factory.Parameters, default, IsInternal: true)));
+			}
+
 			if (hidden is not null)
 			{
 				(List<RegistrationFactory> hiddenFactories, handles, aliases, initializers) = CompleteHiddenServices(hidden, compilation, diagnostics);

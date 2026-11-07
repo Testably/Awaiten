@@ -1220,6 +1220,59 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class ScanMatchesTakingAnInternalService
+	{
+		private const string Library = """
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPlugin { }
+			internal interface IStore { }
+			internal sealed class Store : IStore { }
+			internal sealed class Roaster : IPlugin { public Roaster(IStore store) { } }
+
+			[Module]
+			[Singleton<Store, IStore>]
+			[Scan<IPlugin>(As = ScanAs.Marker)]
+			public static partial class CoffeeModule
+			{
+			    private sealed class Plugin : IPlugin { public Plugin(IStore store) { } }
+			}
+			""";
+
+		private const string Container = """
+			[Container]
+			[Import(typeof(CoffeeModule))]
+			public static partial class MyContainer;
+			""";
+
+		[Test]
+		public async Task ContainerInTheModulesAssembly_RegistersEveryMatch()
+		{
+			GeneratorResult result = Generator.Run(Library + Container);
+			string source = result.Sources["Awaiten.Lib.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains("new global::Lib.Roaster(")
+				.Because("the container constructs the internal match itself, with the internal store it builds");
+			await That(source).Contains("global::Lib.CoffeeModule.Internals.InternalScan_Plugin_")
+				.Because("the container builds the private match through the internal factory that takes the store directly");
+			await That(ModuleSource(result)).Contains("internal static global::Lib.IPlugin InternalScan_Plugin_")
+				.And.Contains($"public static global::Lib.IPlugin Scan_Plugin_")
+				.Because("a container in another assembly still takes the store through its handle");
+		}
+
+		[Test]
+		public async Task ContainerInAnotherAssembly_RegistersEveryMatch()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("Internals.Scan_Plugin_").And.Contains("Internals.Scan_Roaster_");
+		}
+	}
+
 	public class InternalImplementationOfSeveralModules
 	{
 		private const string Library = """
