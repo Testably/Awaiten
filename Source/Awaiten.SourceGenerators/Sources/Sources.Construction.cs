@@ -513,7 +513,7 @@ internal static partial class Sources
 			// An async-tainted factory produces its Task through the awaiting async resolver; a synchronous one
 			// wraps its resolver's result in a completed task. By-type deferral carries no ambient token (default).
 			string taskValue = target.IsAsyncTainted
-				? $"{asyncResolver}(__s, {requestingType}, default)"
+				? AsServiceTask(parameter, target, $"{asyncResolver}(__s, {requestingType}, default)")
 				: $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({resolver}(__s, {requestingType}))";
 			return parameter.Kind switch
 			{
@@ -583,12 +583,34 @@ internal static partial class Sources
 		string callArgs = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
 		if (target.IsAsyncTainted)
 		{
-			return AsyncResolveCall(names.AsyncResolver(targetIndex), rootOwned, callArgs + "default");
+			return AsServiceTask(parameter, target, AsyncResolveCall(names.AsyncResolver(targetIndex), rootOwned, callArgs + "default"));
 		}
 
 		string syncArgs = argTypes.Length == 0 ? "" : ", " + string.Join(", ", argTypes.Select((_, i) => "a" + i));
 		return $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({ResolveCall(names.Resolver(targetIndex), rootOwned, syncArgs)})";
 	}
+
+	/// <summary>
+	///     Adapts the <c>Task</c> of <paramref name="target" />'s async resolver to the task of the parameter's service
+	///     through <c>__AsTask</c> when the two differ, since <c>Task&lt;T&gt;</c> is not covariant.
+	/// </summary>
+	private static string AsServiceTask(ParameterModel parameter, InstanceModel target, string task)
+		=> ConvertsTask(parameter, target) ? $"__AsTask<{target.SurfaceType}, {parameter.ServiceType}>({task})" : task;
+
+	private static bool ConvertsTask(ParameterModel parameter, InstanceModel target)
+		=> target.IsAsyncTainted && target.SurfaceType != parameter.ServiceType;
+
+	/// <summary>
+	///     Whether some async relationship dependency adapts its target's task through <c>__AsTask</c>
+	///     (see <see cref="AsServiceTask" />), so the helper is emitted. A root-owned <c>Owned&lt;T&gt;</c> form
+	///     resolves through <c>ResolveAsync(Type)</c> instead (see <see cref="AsyncOwnedInner" />).
+	/// </summary>
+	private static bool UsesTaskConversion(InstanceModel[] instances, Dictionary<ServiceKey, int> serviceToIndex)
+		=> instances.Any(instance => instance.WalkedDependencies().Any(parameter =>
+			parameter.Kind is DependencyKind.Task or DependencyKind.FuncTask or DependencyKind.LazyTask
+			&& serviceToIndex.TryGetValue(new ServiceKey(parameter.ServiceType, parameter.Key), out int index)
+			&& ConvertsTask(parameter, instances[index])
+			&& !(parameter.ProducesOwned && IsRootOwned(instances[index]))));
 
 	/// <summary>
 	///     A <c>new Func&lt;TArg…, Task&lt;T&gt;&gt;((a0, …) =&gt; …)</c> expression: the async counterpart of
@@ -620,7 +642,7 @@ internal static partial class Sources
 		if (target.IsAsyncTainted)
 		{
 			string callArgs = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
-			return $"(__o, __ct) => {names.AsyncResolver(targetIndex)}(__o, {callArgs}__ct)";
+			return $"(__o, __ct) => {AsServiceTask(parameter, target, $"{names.AsyncResolver(targetIndex)}(__o, {callArgs}__ct)")}";
 		}
 
 		string syncArgs = argTypes.Length == 0 ? "" : ", " + string.Join(", ", argTypes.Select((_, i) => "a" + i));
