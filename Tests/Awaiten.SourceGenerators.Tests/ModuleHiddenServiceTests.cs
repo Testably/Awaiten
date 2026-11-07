@@ -1387,6 +1387,113 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class PrivateImplementationOfAnInternalService
+	{
+		private const string Consumed = "";
+
+		private const string Unconsumed = "unconsumed";
+
+		private const string Eager = "(Eager = true)";
+
+		private const string Hooked = "(OnActivated = nameof(Activate), OnRelease = nameof(Release))";
+
+		private const string Container = """
+			[Container]
+			[Import(typeof(CoffeeModule))]
+			public static partial class MyContainer;
+			""";
+
+		private static string Library(string variant, bool grant = false) => $$"""
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IGrinder { object Store { get; } }
+			internal interface IBeanStore { }
+			internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) => Store = store; public object Store { get; } }
+
+			[Module]
+			[Singleton<CoffeeModule.BeanStore, IBeanStore>{{(variant is Eager or Hooked ? variant : "")}}]
+			{{(variant == Unconsumed || variant == Eager ? "" : "[Singleton<Grinder, IGrinder>]")}}
+			public static partial class CoffeeModule
+			{
+			    private sealed class BeanStore : IBeanStore { }
+			    private static void Activate(BeanStore store) { }
+			    private static void Release(BeanStore store) { }
+			}
+			""";
+
+		[Test]
+		[Arguments(Consumed)]
+		[Arguments(Unconsumed)]
+		[Arguments(Eager)]
+		[Arguments(Hooked)]
+		public async Task Library_BuildsCleanly(string variant)
+		{
+			GeneratorResult result = Generator.Run(Library(variant));
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("no public generated member names the internal service or the private implementation");
+			await That(ModuleSource(result)).DoesNotContain("public static global::Lib.IBeanStore")
+				.And.DoesNotContain("global::Lib.CoffeeModule.BeanStore Value")
+				.Because("the factory of the private implementation is internal, and its instance handle never exposes the private type");
+		}
+
+		[Test]
+		[Arguments(Consumed)]
+		[Arguments(Unconsumed)]
+		[Arguments(Eager)]
+		[Arguments(Hooked)]
+		public async Task LibraryGrantingInternalsVisibleTo_BuildsCleanly(string variant)
+		{
+			GeneratorResult result = Generator.Run(Library(variant, grant: true));
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+
+		[Test]
+		[Arguments(Consumed)]
+		[Arguments(Eager)]
+		[Arguments(Hooked)]
+		public async Task ContainerInTheModulesAssembly_BuildsItThroughTheInternalFactory(string variant)
+		{
+			GeneratorResult result = Generator.Run(Library(variant) + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.Lib.MyContainer.g.cs"]).Contains($"global::Lib.CoffeeModule.Internals.Internal{Factory("global::Lib.CoffeeModule.BeanStore")}()")
+				.Because("a container that builds the internal services itself calls the internal factory of the private implementation");
+		}
+
+		[Test]
+		[Arguments(Consumed)]
+		[Arguments(Eager)]
+		[Arguments(Hooked)]
+		public async Task ContainerInAnAssemblyGrantedInternalsVisibleTo_BuildsItThroughTheInternalFactory(string variant)
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(variant, grant: true), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains($"Internal{Factory("global::Lib.CoffeeModule.BeanStore")}()").And.DoesNotContain("Hidden")
+				.Because("a friend builds the internal services itself, through the internal factory of the private implementation, and registers no handles");
+		}
+
+		[Test]
+		[Arguments(Consumed)]
+		[Arguments(Eager)]
+		[Arguments(Hooked)]
+		public async Task ContainerInAnotherAssembly_TakesItThroughTheHandle(string variant)
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(variant), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains(HiddenFactory("global::Lib.CoffeeModule.BeanStore"))
+				.Because("a container that cannot name the internal service builds the private implementation into its instance handle");
+		}
+	}
+
 	public class PrivateProductionMemberOfAnInternalService
 	{
 		private const string Instance = "Instance = nameof(Default)";

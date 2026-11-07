@@ -447,8 +447,10 @@ partial class AwaitenGenerator
 	///     The implementations of a module another assembly can name that it builds through a handle, and which of
 	///     them can be built: those it builds through a handle on its own account (see <see cref="HandledShape" />), and
 	///     in an assembly with several modules those another module builds through a handle, so all of them share one
-	///     instance handle. The module drops such an implementation again when one of its scans matches it too, and leaves one
-	///     private to the module to the factory a container in its own assembly calls. An implementation whose generated
+	///     instance handle. The module drops such an implementation again when one of its scans matches it too. One private
+	///     to the module is built through its handle for a container in another assembly, while a container in the
+	///     module's own assembly, or in one it grants <c>InternalsVisibleTo</c>, calls its internal factory (see
+	///     <see cref="CollectModuleRegistrationFactories" />). An implementation whose generated
 	///     factory would fail is not viable, and nor is any internal service it is registered under, so a member that
 	///     needs such a service falls back to what it did before (AWT195). Returns <see langword="null" /> for a module
 	///     no other assembly can name.
@@ -614,7 +616,7 @@ partial class AwaitenGenerator
 			ImplementationTraits traits = TraitsOf(implementation, []);
 			handles.Add(new HiddenHandle(
 				HiddenInstanceName(implementation),
-				implementation.ToDisplayString(FullyQualified),
+				InstanceValueType(implementation, compilation),
 				wrap || (constructed && traits is { Disposable: true, AsyncDisposable: false, }),
 				wrap || (constructed && traits is { Disposable: false, AsyncDisposable: true, }),
 				wrap || (constructed && traits is { Disposable: true, AsyncDisposable: true, }),
@@ -1088,13 +1090,29 @@ partial class AwaitenGenerator
 			}
 
 			string returnType = internalService ? hidden.HandleType(service) : service.ToDisplayString(FullyQualified);
+			string value = InstanceValue(implementation, service.ToDisplayString(FullyQualified), compilation);
 			yield return new HiddenAlias(
 				HiddenAliasName(implementation, service),
 				returnType,
 				hidden.InstanceHandleType(implementation),
-				internalService ? $"new {returnType}(@awaiten__handle.Value)" : "@awaiten__handle.Value");
+				internalService ? $"new {returnType}({value})" : value);
 		}
 	}
+
+	/// <summary>
+	///     The type the instance handle of <paramref name="implementation" /> holds its instance as: the implementation,
+	///     or <see cref="object" /> for one the rest of its assembly cannot name, such as a type private to the module,
+	///     which no member of the public handle may expose (see <see cref="InstanceValue" />).
+	/// </summary>
+	private static string InstanceValueType(INamedTypeSymbol implementation, Compilation compilation)
+		=> compilation.IsSymbolAccessibleWithin(implementation, compilation.Assembly) ? implementation.ToDisplayString(FullyQualified) : "object";
+
+	/// <summary>
+	///     The instance an alias reads from the instance handle of <paramref name="implementation" /> as
+	///     <paramref name="service" />, cast when the handle holds it as <see cref="object" /> (see <see cref="InstanceValueType" />).
+	/// </summary>
+	private static string InstanceValue(INamedTypeSymbol implementation, string service, Compilation compilation)
+		=> compilation.IsSymbolAccessibleWithin(implementation, compilation.Assembly) ? "@awaiten__handle.Value" : $"(({service})@awaiten__handle.Value)";
 
 	/// <summary>
 	///     The aliases of the matches of the module's scans whose implementation only other modules of the assembly
@@ -1115,7 +1133,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			yield return new HiddenAlias(HiddenAliasName(implementation, factory.ServiceType), factory.ServiceType, hidden.InstanceHandleType(implementation), "@awaiten__handle.Value");
+			yield return new HiddenAlias(HiddenAliasName(implementation, factory.ServiceType), factory.ServiceType, hidden.InstanceHandleType(implementation), InstanceValue(implementation, factory.ServiceType, hidden.Compilation));
 		}
 	}
 

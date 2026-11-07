@@ -29,9 +29,10 @@ partial class AwaitenGenerator
 	///     another assembly can import the module without <c>InternalsVisibleTo</c>. A module another assembly cannot
 	///     name, or a service it cannot name, never reaches such a container, so neither is self-compiled. An
 	///     implementation hidden in the module (see <see cref="IsHiddenInModule" />) is self-compiled whatever the
-	///     module's accessibility, since only the module can construct it, unless the factory, which is as visible as
-	///     the module, could not return the service. The module's build and every importing container ask this same
-	///     question.
+	///     module's accessibility, since only the module can construct it, unless no factory could return the service,
+	///     because it is private or protected too. The factory of such an implementation under an internal service is
+	///     internal (see <see cref="RegistrationFactoryOf" />). The module's build and every importing container ask this
+	///     same question.
 	/// </summary>
 	private static bool SelfCompilesRegistration(INamedTypeSymbol module, INamedTypeSymbol implementation, INamedTypeSymbol service, Compilation compilation)
 		=> implementation is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
@@ -119,7 +120,7 @@ partial class AwaitenGenerator
 
 			string name = RegistrationFactoryName(implementation);
 			string internalName = InternalRegistrationFactoryName(implementation);
-			return direct.FirstOrDefault(factory => factory.FactoryName == internalName) ?? factories.FirstOrDefault(factory => factory.FactoryName == name);
+			return direct.Concat(factories).FirstOrDefault(factory => factory.FactoryName == internalName) ?? factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 
 		/// <summary>
@@ -584,7 +585,8 @@ partial class AwaitenGenerator
 	{
 		ModuleScanContext plain = context with { Hidden = null, Diagnostics = new List<DiagnosticInfo>(), FailedHooks = new HashSet<string>(StringComparer.Ordinal), };
 		RegistrationFactory? direct = RegistrationFactoryOf(first, all, plain with { Internal = true, }, scanFactories, false, new List<SkippedRegistration>());
-		return direct is not null && direct != RegistrationFactoryOf(first, all, plain, scanFactories, false, new List<SkippedRegistration>())
+		RegistrationFactory? exposed = RegistrationFactoryOf(first, all, plain, scanFactories, false, new List<SkippedRegistration>());
+		return direct is not null && exposed is not { IsInternal: true, } && direct != exposed
 			? direct with { FactoryName = InternalRegistrationFactoryName(first.Implementation), IsInternal = true, }
 			: null;
 	}
@@ -592,7 +594,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The factory of one self-compiled implementation from its registrations, or <see langword="null" /> after
 	///     reporting why it cannot be built or recording it in <paramref name="skipped" /> (see
-	///     <see cref="CollectModuleRegistrationFactories" />).
+	///     <see cref="CollectModuleRegistrationFactories" />). A factory of a module another assembly can name that can
+	///     return only an internal type, such as the internal service of an implementation private to the module, is
+	///     internal, with its hooks, and takes the internal services directly, since only containers that build them
+	///     themselves can call it.
 	/// </summary>
 	private static RegistrationFactory? RegistrationFactoryOf(
 		ModuleRegistration first,
@@ -617,6 +622,13 @@ partial class AwaitenGenerator
 				"register it under a single service, give it a public base type or interface that covers its services, or make the implementation public",
 				all.First(registration => !SymbolEqualityComparer.Default.Equals(registration.Service, first.Service)).Location,
 				rejections);
+		}
+
+		if (returnType is not null && !context.Internal && IsExternallyAccessible(context.Module) && !IsExternallyAccessible(returnType))
+		{
+			return RegistrationFactoryOf(first, all, context with { Hidden = null, Internal = true, }, scanFactories, friendsCanConstruct, skipped) is { } internalFactory
+				? internalFactory with { FactoryName = InternalRegistrationFactoryName(implementation), IsInternal = true, }
+				: null;
 		}
 
 		string returnName = (returnType ?? first.Service).ToDisplayString(FullyQualified);

@@ -123,7 +123,7 @@ internal static partial class Sources
 			foreach (RegistrationHook hook in registration.Hooks.AsArray())
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin, registration.Handle is not null);
+				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin, registration.Handle is not null, registration.IsInternal);
 			}
 		}
 
@@ -539,8 +539,8 @@ internal static partial class Sources
 	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
 	///     <c>public</c> signature is all a consumer needs to run it.
 	/// </summary>
-	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin, bool fromHandle = false)
-		=> EmitHookWrapper(builder, depth, "public", instanceType, hook, fromHandle,
+	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin, bool fromHandle = false, bool isInternal = false)
+		=> EmitHookWrapper(builder, depth, isInternal ? "internal" : "public", instanceType, hook, fromHandle,
 			$"Generated from {origin}: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
 			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
 
