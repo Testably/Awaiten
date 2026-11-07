@@ -53,6 +53,31 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
+		public async Task ADecoratorOfAServiceOnlyTheModuleThatDeclaresTheHandleRegisters_ReportsAwt238Alone()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				internal interface IKettle { }
+				internal sealed class Kettle : IKettle { }
+				internal sealed class Logging : IKettle { public Logging(IKettle inner) { } }
+
+				[Module]
+				[Singleton<Kettle, IKettle>]
+				public static partial class KettleModule { }
+
+				[Module]
+				[Decorate<Logging, IKettle>]
+				public static partial class LoggingModule { }
+				""", Consumer("LoggingModule"));
+
+			await That(result.Diagnostics).HasSingle().Which.Contains("*AWT238*'Lib.LoggingModule'*'Lib.IKettle'*'Lib.KettleModule'*").AsWildcard()
+				.Because("the missing import is the one cause, so the decorated handle without a registration is not reported again (AWT123)");
+		}
+
+		[Test]
 		public async Task TheModuleThatDeclaresTheHandleImported_DoesNotReportAwt238()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library, Consumer("StorageModule", "CoffeeModule"));
