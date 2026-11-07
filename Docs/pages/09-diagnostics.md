@@ -1994,7 +1994,7 @@ internal sealed class Roaster(Secret secret) : IRoaster;   // Secret is internal
 public static partial class PluginModule;
 ```
 
-The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
+The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. A parameter of an internal type that the module itself registers with a constructor is fine: the factory takes it through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses). Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 The factory is as accessible as the module. The factory of an `internal` module, which builds the types private to it, is reached only from the module's own assembly and from assemblies it grants `InternalsVisibleTo`, so its parameter types may be internal too.
 
@@ -2049,15 +2049,16 @@ public static partial class PluginModule;
 ```
 
 ```csharp expect=AWT197
-internal sealed class Roaster : IPlugin, IRoaster;
-
 [Module]
 [Singleton<Roaster, IRoaster>]
-[Singleton<Roaster, IPlugin>]   // a second service of the internal Roaster
-public static partial class RoastingModule;
+[Singleton<Roaster, IPlugin>]   // a second service of the private Roaster
+public static partial class RoastingModule
+{
+    private sealed class Roaster : IPlugin, IRoaster;
+}
 ```
 
-A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as is an [internal implementation](./04-registration/07-modules.md#internal-implementations) that a scan of the same module matches too. Several keys of one service share the factory and stay one instance. A registered internal implementation can serve several services when one public type covers them all: the factory returns a registered service that converts to the others, or a public base class or interface of the implementation. Without such a type it is rejected too. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation. For an internal implementation registered under several services, a match its scans expose under two interfaces, or an internal implementation that the module both registers and scans, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, both factories in the last case, and a container that can't construct the implementation reports [AWT231](#awt231). A public implementation with a public constructor that the module both registers and scans is never reported: every container constructs it and shares one instance, so the scan generates no factory.
+A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as is an [internal implementation](./04-registration/07-modules.md#internal-implementations) that a scan of the same module matches too. Several keys of one service share the factory and stay one instance. A registered internal implementation can serve several services when one public type covers them all: the factory returns a registered service that converts to the others, or a public base class or interface of the implementation. Without such a type, the module shares the instance through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) instead. A type private to the module, or one the handle's factory can't build, is still rejected. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation. For an internal implementation registered under several services, a match its scans expose under two interfaces, or an internal implementation that the module both registers and scans, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, both factories in the last case, and a container that can't construct the implementation reports [AWT231](#awt231). A public implementation with a public constructor that the module both registers and scans is never reported: every container constructs it and shares one instance, so the scan generates no factory.
 
 **Fix:** Narrow `As` to a single interface, typically `As = ScanAs.MatchingInterface`, or exclude the match; register an internal implementation under a single service, give it a public base type or interface that covers its services, or make it public.
 
@@ -2259,6 +2260,49 @@ public static partial class CoffeeShop
 ```
 
 **Fix:** Rename the member.
+
+### AWT236
+
+:::danger[Error]
+A self-compiled module registration needs an internal service that the module doesn't register, but another module of the same assembly does.
+:::
+
+```csharp expect=AWT236
+internal sealed class BeanStore;
+internal sealed class Grinder(BeanStore beans) : IGrinder;
+
+[Module]
+[Singleton<BeanStore>]
+public static partial class StorageModule;
+
+[Module]
+[Singleton<Grinder, IGrinder>]   // BeanStore is registered only in StorageModule
+public static partial class CoffeeModule;
+```
+
+A container in another assembly reaches an internal service only through the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of the module that registers it, and a handle serves only that module. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
+
+**Fix:** Register the internal service in the module that needs it too, or move both registrations into one module.
+
+### AWT237
+
+:::danger[Error]
+A self-compiled module registration takes an internal service the module registers in a shape its generated factory can't pass on.
+:::
+
+```csharp expect=AWT237
+internal sealed class BeanStore;
+internal sealed class Grinder(Task<BeanStore> beans) : IGrinder;   // Task<T> of an internal service
+
+[Module]
+[Singleton<BeanStore>]
+[Singleton<Grinder, IGrinder>]
+public static partial class CoffeeModule;
+```
+
+The factory takes the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of the internal service in the same shape and passes the instance it holds on. It can do that for the service itself and for `Func<T>`, `Lazy<T>`, `Owned<T>`, `Func<Owned<T>>` and the collections of `T`, but not for other shapes such as `Task<T>`, `Lazy<Task<T>>` or a keyed dictionary. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
+
+**Fix:** Take the internal service in one of the supported shapes, or make the service public.
 
 ### AWT240
 
