@@ -422,31 +422,6 @@ public class RegistrationFactoryShapeTests
 		}
 
 		[Test]
-		public async Task AnInitOnlyOptionalInjectProperty_StillReportsAwt200()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using Awaiten;
-
-			                                       namespace Lib;
-
-			                                       public interface IGreeter { }
-			                                       public interface IClock { }
-			                                       internal sealed class Greeter : IGreeter
-			                                       {
-			                                           [Inject(Optional = true)]
-			                                           public IClock? Clock { get; init; }
-			                                       }
-
-			                                       [Module]
-			                                       [Singleton<Greeter, IGreeter>]
-			                                       public static partial class GreetingModule { }
-			                                       """);
-
-			await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
-				.Because("the factory assigns an optional property only after construction, which an init-only accessor does not allow");
-		}
-
-		[Test]
 		public async Task AnInitOnlyDeferredInjectProperty_StillReportsAwt200()
 		{
 			GeneratorResult result = Generator.Run("""

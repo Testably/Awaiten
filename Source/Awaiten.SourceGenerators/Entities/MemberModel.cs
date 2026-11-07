@@ -14,5 +14,7 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     (its assignment captures the target for the owner's lifetime and awaits an async-initialized target).
 ///     <see cref="Setter" /> is the qualified setter wrapper a module generates for a deferred member of an
 ///     implementation built through its factory, which the container calls instead of assigning the property.
+///     <see cref="PresenceFlag" /> names the presence flag a module's factory takes beside an
+///     <c>[Inject(Optional = true)]</c> member, whose service is registered, since a missing one yields no member.
 /// </summary>
-internal sealed record MemberModel(string MemberName, ParameterModel Dependency, bool Deferred = false, string? Setter = null);
+internal sealed record MemberModel(string MemberName, ParameterModel Dependency, bool Deferred = false, string? Setter = null, string? PresenceFlag = null);

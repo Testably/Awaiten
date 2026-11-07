@@ -468,7 +468,7 @@ public partial class DiagnosticTests
 		public class Awt200
 		{
 			[Test]
-			public async Task ReportsAnInitOnlyOptionalInjectProperty()
+			public async Task ReportsARequiredOptionalInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -480,7 +480,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Optional = true)]
-					    public IClock? Clock { get; init; }
+					    public required IClock Clock { get; set; }
 					}
 
 					[Module]
@@ -489,7 +489,7 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
-					.Because("no other assembly can ever construct the implementation, and the factory cannot assign an init-only property after construction");
+					.Because("no container can leave a required property unassigned when its optional service is missing");
 			}
 
 			[Test]
@@ -518,7 +518,34 @@ public partial class DiagnosticTests
 			}
 
 			[Test]
-			public async Task DoesNotReportAnInitOnlyOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task ReportsAPrivateInjectPropertyOfAPublicImplementationEvenWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					public interface IClock { }
+					public sealed class Greeter : IGreeter
+					{
+					    [Inject]
+					    private IClock Clock { get; set; } = null!;
+					}
+
+					[Module]
+					[Singleton<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*'Clock' has no setter the module can reach*").AsWildcard()
+					.Because("no container can set a private property, and one in another assembly does not even see it, so it would leave it out silently");
+			}
+
+			[Test]
+			public async Task DoesNotReportARequiredOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -532,7 +559,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Optional = true)]
-					    public IClock Clock { get; init; } = null!;
+					    public required IClock Clock { get; set; }
 					}
 
 					[Module]
@@ -541,7 +568,7 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).IsEmpty()
-					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and honors the optional property");
+					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and reports the property there");
 				await That(result.Sources.Values.Single()).Contains("its property 'Clock' is marked [Inject(Optional = true)]");
 			}
 
@@ -565,7 +592,7 @@ public partial class DiagnosticTests
 					    private sealed class Greeter : IGreeter
 					    {
 					        [Inject(Optional = true)]
-					        public IClock? Clock { get; init; }
+					        public required IClock Clock { get; set; }
 					    }
 					}
 					""");
@@ -592,7 +619,7 @@ public partial class DiagnosticTests
 					    private sealed class Greeter : IGreeter
 					    {
 					        [Inject(Optional = true)]
-					        public IClock? Clock { get; init; }
+					        public required IClock Clock { get; set; }
 					    }
 
 					    [Module]

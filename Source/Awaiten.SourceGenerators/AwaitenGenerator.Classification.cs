@@ -90,6 +90,21 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			if (IsPresenceFlag(parameter, producer))
+			{
+				ParameterModel? value = parameters.Count > 0 ? parameters[parameters.Count - 1] : null;
+				parameters.Add(new ParameterModel("bool", value?.Kind == DependencyKind.Absent ? DependencyKind.Absent : DependencyKind.Present));
+				if (parameter.Name.StartsWith(InitOnlyPresenceFlagPrefix, StringComparison.Ordinal) && value is not null && !IsSynthesizedCollection(value.Kind))
+				{
+					context.Diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.OptionalPropertyIsInitOnly,
+						null,
+						new EquatableArray<string>([parameter.Name.Substring(InitOnlyPresenceFlagPrefix.Length), DisplayInstance(info.ImplementationType),])));
+				}
+
+				continue;
+			}
+
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory, context.External.ServiceTypes);
 
 			ReportUnsupportedFromKey(parameter.GetAttributes(), parameterModel.Location ?? info.Location, DisplayInstance(info.ImplementationType), context.Diagnostics);
@@ -110,6 +125,15 @@ partial class AwaitenGenerator
 			ReportUnsupportedKeyedCollectionKey(parameterModel, parameter.Type, info, context.ServiceToImpl, context.Diagnostics);
 			ReportFromKeyOnKeyedCollection(parameterModel, parameter.Type, info, context.Diagnostics);
 
+			// The optional property of a generated factory is classified like the property itself, which neither a
+			// variant registration nor the [ImportServices] fall-through below fills.
+			if (parameter.HasExplicitDefaultValue
+			    && IsGeneratedOwnerFactory(producer)
+			    && IsMissingOptional(parameterModel, context.ServiceToImpl))
+			{
+				parameterModel = parameterModel with { Kind = DependencyKind.Absent, };
+			}
+
 			// Variance: a closed-generic-interface request with no exact registration is redirected to a
 			// variance-compatible registration before the [ImportServices] fall-through below. A match makes the
 			// dependency container-resolved, so it is no longer "otherwise-unresolved" and never falls through to
@@ -125,15 +149,6 @@ partial class AwaitenGenerator
 			    && !context.ServiceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
 				parameterModel = parameterModel with { Kind = DependencyKind.External, };
-			}
-
-			if (parameter is { HasExplicitDefaultValue: true, ExplicitDefaultValue: null, }
-			    && IsGeneratedOwnerFactory(producer)
-			    && parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External)
-			    && !IsSynthesizedCollection(parameterModel.Kind)
-			    && !context.ServiceToImpl.ContainsKey(KeyOf(parameterModel)))
-			{
-				parameterModel = parameterModel with { Kind = DependencyKind.Absent, };
 			}
 
 			parameters.Add(parameterModel);
@@ -156,6 +171,22 @@ partial class AwaitenGenerator
 		return parameters;
 	}
 
+	/// <summary>Whether <paramref name="parameter" /> is the presence flag (see <see cref="PresenceFlagName" />) of a generated factory.</summary>
+	private static bool IsPresenceFlag(IParameterSymbol parameter, IMethodSymbol producer)
+		=> parameter is { HasExplicitDefaultValue: true, Type.SpecialType: SpecialType.System_Boolean, }
+		   && (parameter.Name.StartsWith(PresenceFlagPrefix, StringComparison.Ordinal) || parameter.Name.StartsWith(InitOnlyPresenceFlagPrefix, StringComparison.Ordinal))
+		   && IsGeneratedOwnerFactory(producer);
+
+	/// <summary>
+	///     Whether the optional value of a generated factory or setter wrapper resolves a service the container does not
+	///     register, so it leaves the property as it is, as it omits an optional <c>[Inject]</c> property it constructs
+	///     itself. A runtime argument, a forwarded token, an external service and a collection are never missing.
+	/// </summary>
+	private static bool IsMissingOptional(ParameterModel dependency, Dictionary<ServiceKey, string> serviceToImpl)
+		=> dependency.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External)
+		   && !IsSynthesizedCollection(dependency.Kind)
+		   && !serviceToImpl.ContainsKey(KeyOf(dependency));
+
 	/// <summary>
 	///     The single predicate every gate uses to treat all collection kinds alike (AWT101/AWT141 exemption,
 	///     constructor eligibility, the guarded graph indexer), so adding a collection kind is a one-line change here.
@@ -174,7 +205,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
 	{
-		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External or DependencyKind.Absent
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External or DependencyKind.Absent or DependencyKind.Present
 		    || IsSynthesizedCollection(parameterModel.Kind)
 		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))
@@ -441,7 +472,7 @@ partial class AwaitenGenerator
 				])));
 		}
 
-		return new MemberModel(property.Name, dependency, spec.Deferred);
+		return new MemberModel(property.Name, dependency, spec.Deferred, PresenceFlag: spec.Optional ? PresenceFlagName(property.Name, setter.IsInitOnly) : null);
 	}
 
 	/// <summary>

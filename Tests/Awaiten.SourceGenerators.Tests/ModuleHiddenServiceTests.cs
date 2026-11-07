@@ -670,10 +670,10 @@ public class ModuleHiddenServiceTests
 
 		await That(result.Diagnostics).IsEmpty()
 			.Because("an optional property becomes an optional factory parameter and a deferred one gets a setter wrapper");
-		await That(module).Contains($"public static global::Lib.IGrinder {factory}(global::Lib.IClock? @Clock = null)")
-			.And.Contains("if (@Clock is not null)")
+		await That(module).Contains($"public static global::Lib.IGrinder {factory}(global::Lib.IClock @Clock = default!, bool awaiten__has_Clock = false)")
+			.And.Contains("if (awaiten__has_Clock)")
 			.And.Contains("awaiten__instance.Clock = @Clock;")
-			.Because("a consumer passes null when the optional service is missing, and the factory then leaves the property as it is");
+			.Because("a consumer marks a registered optional service present, so the factory assigns it even when it resolved to null and leaves the property as it is for a missing one");
 		await That(module).Contains($"public static void Deferred_{factory}_Audit(global::Lib.IGrinder @awaiten__instance, global::Lib.IAudit @Audit) => ((global::Lib.Grinder)@awaiten__instance).Audit = @Audit;")
 			.Because("a consumer assigns a deferred property after it built and cached the instance, so it can break a cycle");
 	}
@@ -1086,8 +1086,8 @@ public class ModuleHiddenServiceTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the missing optional clock is no missing dependency, and the deferred audit breaks the cycle with the grinder");
-			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{factory}(default!)")
-				.Because("the container passes null for an optional service it does not register");
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{factory}(default!, default!)")
+				.Because("the container passes neither a value nor the presence flag for an optional service it does not register");
 			await That(source).Contains($"global::Lib.CoffeeModule.Internals.Deferred_{factory}_Audit(")
 				.Because("the container assigns the deferred property through the module's setter wrapper");
 		}

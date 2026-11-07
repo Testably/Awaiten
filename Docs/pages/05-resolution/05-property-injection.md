@@ -107,7 +107,7 @@ A property without an entry is left alone. Injection stays opt-in, one property 
 
 ## The escape hatch: `[Inject]` on the property
 
-Marking the property itself with `[Inject]` asks for the same injection from the domain side. It fills exactly like a container-side entry, and `Optional`, `Deferred`, and a `[FromKey]` alongside it all work.
+Marking the property itself with `[Inject]` asks for the same injection from the domain side. It fills exactly like a container-side entry, and `Optional`, `Deferred`, and a `[FromKey]` alongside it all work. An `internal` `[Inject]` property, or one with an `internal` setter, is set by a container in its own assembly. A container in another assembly doesn't see it, so register such a type in a [module](../04-registration/07-modules.md#internal-implementations) of its own assembly, whose generated factory sets the property.
 
 ```csharp
 public sealed class Handler<T>

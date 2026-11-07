@@ -23,4 +23,13 @@
 		<ProjectReference Include="..\Awaiten.Tests.Support\Awaiten.Tests.Support.csproj" />
 	</ItemGroup>
 
+	<!-- The init accessors of CrossAssemblyFriendInjectedShapesModule on net48. Awaiten.Tests, which this assembly
+	     grants InternalsVisibleTo, uses this copy too, since a second one would conflict (CS0436). -->
+	<ItemGroup>
+		<PackageReference Include="IsExternalInit">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
 </Project>

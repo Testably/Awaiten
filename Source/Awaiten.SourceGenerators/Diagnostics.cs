@@ -1499,10 +1499,10 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A self-compiled module <c>[Scan]</c> match or module registration carries injection metadata the
-	///     generated factory cannot mirror: an <c>[Inject]</c> property of a scan match, or an optional, deferred or
-	///     otherwise unmirrorable <c>[Inject]</c> property of a registration. The factory carries <c>[Arg]</c> and
-	///     <c>[FromKey]</c> onto its parameters, but optionality and deferral would be silently dropped, and the same type
-	///     would behave differently in a container of the module's own assembly. Rejected rather than silently degraded.
+	///     generated factory cannot mirror: an <c>[Inject]</c> property of a scan match, or an <c>[Inject]</c> property of
+	///     a registration that no container supports, that is named like a constructor parameter or whose type another
+	///     assembly cannot name. The same type would otherwise behave differently in a container of the module's own
+	///     assembly. Rejected rather than silently degraded.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleScanInjectionMetadata = new(
 		"AWT200",

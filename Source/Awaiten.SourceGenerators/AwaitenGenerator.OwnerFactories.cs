@@ -423,7 +423,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static IMethodSymbol? MirroredConstructor(INamedTypeSymbol type, RegistrationFactory factory)
 	{
-		string[] parameters = factory.Parameters.AsArray().Take(factory.Parameters.Count - factory.Members.Count).Select(parameter => parameter.Type).ToArray();
+		string[] parameters = factory.Parameters.AsArray().Take(factory.Parameters.Count - factory.Members.Count - factory.OptionalMembers.Count).Select(parameter => parameter.Type).ToArray();
 		return type.InstanceConstructors.FirstOrDefault(candidate =>
 			candidate.Parameters.Select(parameter => parameter.Type.ToDisplayString(FullyQualifiedWithNullability)).SequenceEqual(parameters));
 	}

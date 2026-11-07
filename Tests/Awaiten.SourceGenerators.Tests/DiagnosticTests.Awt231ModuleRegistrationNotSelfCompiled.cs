@@ -43,8 +43,10 @@ public partial class DiagnosticTests
 
 			internal sealed class Welcome : IWelcome
 			{
-			    [Inject(Optional = true, Deferred = true)]
-			    public IClock? Clock { get; set; }
+			    public Welcome([FromKey("utc")] IClock Clock) { }
+
+			    [Inject, FromKey("utc")]
+			    public IClock Clock { get; set; } = null!;
 			}
 
 			[Module]
@@ -62,7 +64,7 @@ public partial class DiagnosticTests
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("Lib.Tests"), Consumer);
 
-			await That(result.Diagnostics).Contains("*AWT231*GreetingModule*'Lib.Welcome'*because its property 'Clock' is marked both Optional and Deferred*InternalsVisibleTo*public*").AsWildcard()
+			await That(result.Diagnostics).Contains("*AWT231*GreetingModule*'Lib.Welcome'*because its property 'Clock' has the name of a constructor parameter*InternalsVisibleTo*public*").AsWildcard()
 				.Because("the module skipped the factory on purpose, and the consumer names why and how to fix it");
 			await That(result.Diagnostics.Where(diagnostic => diagnostic.Contains("AWT231"))).HasCount(1)
 				.Because("the internal formatter of 'Lib.Greeter' and the one instance of 'Lib.Farewell' under several services reach the consumer through generated handles, so only 'Lib.Welcome' is skipped");

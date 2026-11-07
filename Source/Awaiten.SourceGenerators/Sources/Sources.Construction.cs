@@ -241,6 +241,10 @@ internal static partial class Sources
 			{
 				arguments.Append("default!");
 			}
+			else if (parameters[p].Kind == DependencyKind.Present)
+			{
+				arguments.Append("true");
+			}
 			else
 			{
 				arguments.Append(DependencyValue(parameters[p], instances, names, serviceToIndex, asynchronous, requestingType));
@@ -255,6 +259,10 @@ internal static partial class Sources
 			{
 				arguments.Append(arguments.Length > 0 ? ", @" : "@").Append(member.MemberName).Append(": ")
 					.Append(DependencyValue(member.Dependency, instances, names, serviceToIndex, asynchronous, requestingType));
+				if (member.PresenceFlag is { } flag)
+				{
+					arguments.Append(", ").Append(flag).Append(": true");
+				}
 			}
 
 			// The container is a static class enclosing both Scope and Root, so its static factory method is in

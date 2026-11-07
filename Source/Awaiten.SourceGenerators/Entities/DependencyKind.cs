@@ -99,8 +99,15 @@ internal enum DependencyKind
 
 	/// <summary>
 	///     The optional parameter of a module's generated factory for an <c>[Inject(Optional = true)]</c> property whose
-	///     service the container does not register: passed as <see langword="null" />, so the factory leaves the
-	///     property as it is. Contributes no edge.
+	///     service the container does not register, or the presence flag after it: passed as <see langword="default" />,
+	///     so the factory leaves the property as it is. Contributes no edge.
 	/// </summary>
 	Absent,
+
+	/// <summary>
+	///     The presence flag after the optional parameter of a module's generated factory whose service the container
+	///     registers: passed as <see langword="true" />, so the factory assigns the service even when it resolved to
+	///     <see langword="null" />. Contributes no edge.
+	/// </summary>
+	Present,
 }

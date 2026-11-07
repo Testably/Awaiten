@@ -385,7 +385,7 @@ internal static partial class Sources
 		string[] optional = factory.OptionalMembers.AsArray();
 		string signature = string.Join(", ", parameters.Select((parameter, index) => index < parameters.Length - optional.Length
 			? MirroredParameter(parameter)
-			: $"{MirroredParameter(parameter with { Type = parameter.Type.EndsWith("?", StringComparison.Ordinal) ? parameter.Type : parameter.Type + "?", })} = null"));
+			: $"{MirroredParameter(parameter)} = default!, bool {AwaitenGenerator.PresenceFlagName(parameter.Name, factory.InitOnlyMembers.AsArray().Contains(parameter.Name))} = false"));
 		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length - optional.Length).Select(parameter => parameter.ArgumentExpression));
 		if (optional.Length > 0)
 		{
@@ -429,7 +429,9 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits a generated factory with optional members (see <see cref="RegistrationFactory.OptionalMembers" />) as a
 	///     block: it constructs the implementation with its required members, assigns each optional member only when the
-	///     consumer passed a service, so a missing one keeps the property's own value, and returns the instance.
+	///     consumer marked its service present, so a missing one keeps the property's own value, and returns the
+	///     instance. An init-only optional member can only be assigned in the object initializer, so the construction
+	///     branches on its flag, one object initializer per combination of present init-only members.
 	/// </summary>
 	private static void EmitFactoryWithOptionalMembers(StringBuilder builder, int depth, RegistrationFactory factory, string accessibility, string signature, string arguments)
 	{
@@ -437,19 +439,23 @@ internal static partial class Sources
 		string[] members = factory.Members.AsArray();
 		string[] optional = factory.OptionalMembers.AsArray();
 		int first = parameters.Length - members.Length - optional.Length;
+		List<string> required = members.Select((member, index) => $"{member} = {parameters[first + index].ArgumentExpression}").ToList();
+		List<(string Member, string Argument)> initOnly = optional
+			.Select((member, index) => (Member: member, Argument: parameters[first + members.Length + index].ArgumentExpression))
+			.Where(entry => factory.InitOnlyMembers.AsArray().Contains(entry.Member))
+			.ToList();
 		Indent(builder, depth).Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName).Append('(').Append(signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).Append("var awaiten__instance = new ").Append(factory.ImplementationType).Append('(').Append(arguments).Append(')');
-		if (members.Length > 0)
-		{
-			builder.Append(" { ").Append(string.Join(", ", members.Select((member, index) => $"{member} = {parameters[first + index].ArgumentExpression}"))).Append(" }");
-		}
-
-		builder.AppendLine(";");
+		Indent(builder, depth + 1).Append("var awaiten__instance = ").Append(Construction(0, required)).AppendLine(";");
 		for (int index = 0; index < optional.Length; index++)
 		{
+			if (factory.InitOnlyMembers.AsArray().Contains(optional[index]))
+			{
+				continue;
+			}
+
 			FactoryParameter parameter = parameters[first + members.Length + index];
-			Indent(builder, depth + 1).Append("if (@").Append(parameter.Name).AppendLine(" is not null)");
+			Indent(builder, depth + 1).Append("if (").Append(AwaitenGenerator.PresenceFlagName(parameter.Name, initOnly: false)).AppendLine(")");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).Append("awaiten__instance.").Append(optional[index]).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");
 			Indent(builder, depth + 1).AppendLine("}");
@@ -457,11 +463,27 @@ internal static partial class Sources
 
 		Indent(builder, depth + 1).Append("return ").Append(factory.Handle is null ? "awaiten__instance" : $"new {factory.Handle}(awaiten__instance)").AppendLine(";");
 		Indent(builder, depth).AppendLine("}");
+
+		string Construction(int index, List<string> assignments)
+		{
+			if (index == initOnly.Count)
+			{
+				string construction = $"new {factory.ImplementationType}({arguments})";
+				return assignments.Count == 0 ? construction : $"{construction} {{ {string.Join(", ", assignments)} }}";
+			}
+
+			string present = Construction(index + 1, [..assignments, $"{initOnly[index].Member} = {initOnly[index].Argument}",]);
+			string absent = Construction(index + 1, assignments);
+			return index + 1 == initOnly.Count
+				? $"{AwaitenGenerator.PresenceFlagName(initOnly[index].Member, initOnly: true)} ? {present} : {absent}"
+				: $"{AwaitenGenerator.PresenceFlagName(initOnly[index].Member, initOnly: true)} ? ({present}) : ({absent})";
+		}
 	}
 
 	/// <summary>
 	///     Emits the setter wrapper of each deferred member of a generated factory: it takes the instance the factory
-	///     returned and the service, and assigns the property, so a consumer wires it after construction.
+	///     returned and the service, and assigns the property, so a consumer wires it after construction. The service of
+	///     an optional property has a default, which tells a consumer to call the setter only when it registers it.
 	/// </summary>
 	private static void EmitDeferredSetters(StringBuilder builder, int depth, RegistrationFactory factory)
 	{
@@ -472,7 +494,8 @@ internal static partial class Sources
 				"Generated from a module registration: assigns a property marked [Inject(Deferred = true)] after a consuming",
 				"container built and cached the instance, so it can break a cycle.");
 			Indent(builder, depth).Append(factory.IsInternal ? "internal" : "public").Append(" static void ").Append(AwaitenGenerator.DeferredSetterName(factory.FactoryName, parameter.Name)).Append('(')
-				.Append(factory.ReturnType).Append(" @awaiten__instance, ").Append(MirroredParameter(parameter)).Append(") => ((")
+				.Append(factory.ReturnType).Append(" @awaiten__instance, ").Append(MirroredParameter(parameter))
+				.Append(factory.OptionalDeferredMembers.AsArray().Contains(parameter.Name) ? " = default!" : string.Empty).Append(") => ((")
 				.Append(factory.ImplementationType).Append(")@awaiten__instance").Append(factory.Handle is null ? string.Empty : ".Value").Append(").")
 				.Append(parameter.Name).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");
 		}

@@ -125,7 +125,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<SkippedRegistration> skipped = new();
 		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation, diagnostics, skipped) : new();
 		HiddenServices? hidden = receives ? CollectHiddenServices(moduleSymbol, compilation, cancellationToken) : null;
-		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation, hidden) : new();
+		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation, hidden, diagnostics) : new();
 		if (!declaresScan && selfCompiled is null && started is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0
 		    && hidden is not { Implementations.Count: > 0, SeveralModules: true, })
 		{
@@ -137,6 +137,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// Under a grant a registration-only module builds anyway, so the message says why a scan module does not.
 		string reason = (selfCompiled, started) switch
 		{
+			({ } registration, _) when ConstructibleEverywhere(registration.Implementation) => $"registers '{Display(registration.Implementation.ToDisplayString(FullyQualified))}', whose [Inject] property another assembly cannot set,",
 			({ } registration, _) => $"registers '{Display(registration.Implementation.ToDisplayString(FullyQualified))}', which another assembly cannot construct,",
 			(null, { Eager: true, } singleton) => $"registers the eager internal singleton '{Display(singleton.Registration.Implementation.ToDisplayString(FullyQualified))}', which a container in another assembly builds through a generated handle,",
 			(null, { } singleton) => $"registers the async-initialized internal singleton '{Display(singleton.Registration.Implementation.ToDisplayString(FullyQualified))}', which a container in another assembly initializes through a generated handle,",

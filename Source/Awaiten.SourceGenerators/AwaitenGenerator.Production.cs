@@ -173,7 +173,8 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The injected members of an implementation a module's generated factory builds, completed with the deferred
 	///     ones, which the factory leaves to its setter wrappers (see <see cref="DeferredSetterName" />): read from the
-	///     wrappers next to a factory from metadata, each classified like a deferred property, or, for a factory the
+	///     wrappers next to a factory from metadata, each classified like a deferred property and left out when its value
+	///     has a default, for an optional property, and its service is missing, or, for a factory the
 	///     module generates in the same run, the deferred members the container discovered pointed at their wrappers.
 	/// </summary>
 	private static List<MemberModel> WithDeferredSetters(List<MemberModel> members, ImplInfo info, IMethodSymbol producer, BuildContext context)
@@ -195,6 +196,11 @@ partial class AwaitenGenerator
 			         .Where(method => method is { IsStatic: true, Parameters.Length: 2, } && method.Name.StartsWith(prefix, StringComparison.Ordinal)))
 		{
 			ParameterModel dependency = ClassifyParameter(setter.Parameters[1], asyncFactory: false, context.External.ServiceTypes);
+			if (setter.Parameters[1].HasExplicitDefaultValue && IsMissingOptional(dependency, context.ServiceToImpl))
+			{
+				continue;
+			}
+
 			ReportWhenUnregistered(dependency, info, context);
 			members.Add(new MemberModel(setter.Name.Substring(prefix.Length), dependency, Deferred: true, $"{producer.ContainingType.ToDisplayString(FullyQualified)}.{setter.Name}"));
 		}

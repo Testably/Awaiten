@@ -879,7 +879,9 @@ partial class AwaitenGenerator
 			members.Required,
 			handle + HandleVariant(TraitsOf(implementation, [])),
 			OptionalMembers: members.Optional,
-			DeferredMembers: members.Deferred);
+			DeferredMembers: members.Deferred,
+			InitOnlyMembers: members.InitOnly,
+			OptionalDeferredMembers: members.OptionalDeferred);
 	}
 
 	/// <summary>How a diagnostic about an implementation the module builds through a handle names it.</summary>
@@ -1034,7 +1036,7 @@ partial class AwaitenGenerator
 		hidden.Use(service);
 		hidden.DecoratorTraits.Add((service, traits));
 		hidden.DecoratorInitializers.AddRange(initializers);
-		return new RegistrationFactory(name, handle, typeName, parameters, default, members.Required, handle + HandleVariant(traits), OptionalMembers: members.Optional, DeferredMembers: members.Deferred);
+		return new RegistrationFactory(name, handle, typeName, parameters, default, members.Required, handle + HandleVariant(traits), OptionalMembers: members.Optional, DeferredMembers: members.Deferred, InitOnlyMembers: members.InitOnly, OptionalDeferredMembers: members.OptionalDeferred);
 	}
 
 	/// <summary>

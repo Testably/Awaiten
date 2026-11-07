@@ -92,10 +92,12 @@ internal sealed record SkippedRegistration(string MarkerName, string Reason, boo
 ///     <c>Factory</c> or <c>Instance</c> <see cref="Call" /> passes the member's result to <see cref="Handle" />, the
 ///     expression that wraps it, instead of constructing the implementation: awaited first for an <see cref="Awaited" />
 ///     task type, and as a property for an <see cref="IsProperty" /> instance. The last
-///     <see cref="OptionalMembers" />.Count parameters are optional and fill their properties only when a consumer
-///     passes a service, and each of the <see cref="DeferredMembers" /> gets a setter wrapper a consumer calls after
-///     construction. An <see cref="IsInternal" /> factory and its setters are internal, for the containers that can name
-///     the internal services the public factory takes through their handles.
+///     <see cref="OptionalMembers" />.Count parameters are optional, each followed by a presence flag, and fill their
+///     properties only when a consumer marks the service present, inside the object initializer for the
+///     <see cref="InitOnlyMembers" />. Each of the <see cref="DeferredMembers" /> gets a setter wrapper a consumer calls
+///     after construction, whose value parameter is optional for the <see cref="OptionalDeferredMembers" />. An
+///     <see cref="IsInternal" /> factory and its setters are internal, for the containers that can name the internal
+///     services the public factory takes through their handles.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,
@@ -110,7 +112,9 @@ internal sealed record RegistrationFactory(
 	bool IsProperty = false,
 	EquatableArray<string> OptionalMembers = default,
 	EquatableArray<FactoryParameter> DeferredMembers = default,
-	bool IsInternal = false);
+	bool IsInternal = false,
+	EquatableArray<string> InitOnlyMembers = default,
+	EquatableArray<string> OptionalDeferredMembers = default);
 
 /// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);

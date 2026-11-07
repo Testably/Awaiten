@@ -361,7 +361,10 @@ partial class AwaitenGenerator
 	///     the generated wrappers; a hook the module's own build rejected (and reports) is dropped. A container in
 	///     another assembly that cannot construct the implementation calls the generated factory instead and runs the
 	///     generated hook wrappers, keeping every other option of the registration, and reads the implementation's
-	///     traits off its metadata, so it initializes, disposes and shares it exactly as it would a type it constructs. A registration whose service this container cannot
+	///     traits off its metadata, so it initializes, disposes and shares it exactly as it would a type it constructs.
+	///     So does a container the module's assembly grants no <c>InternalsVisibleTo</c> for an implementation it could
+	///     construct, but for which the module generated a factory or recorded a skip: the implementation has an
+	///     <c>[Inject]</c> property this container does not see. A registration whose service this container cannot
 	///     name either is dropped: nothing here can resolve or depend on it (a self-compiled constructor parameter
 	///     is accessible, AWT195). Returns <see langword="null" /> for a dropped registration, after reporting
 	///     AWT231 once per implementation when the module recorded why it generated no factory for it or cannot carry
@@ -378,7 +381,14 @@ partial class AwaitenGenerator
 		INamedTypeSymbol module = registration.Origin!;
 		INamedTypeSymbol implementation = registration.Implementation;
 		Compilation compilation = context.Compilation;
-		if (registration.ServiceSymbol is not { } service || !SelfCompilesRegistration(module, implementation, service, compilation))
+
+		// A container that the module's assembly grants no InternalsVisibleTo does not see an internal [Inject] property
+		// in metadata, so it cannot tell that the module self-compiles the implementation, but finds what the module generated for it.
+		bool hiddenMembers = !sameCompilation
+		                     && !context.Inherited
+		                     && !module.ContainingAssembly.GivesAccessTo(compilation.Assembly)
+		                     && (GeneratedFactory(module, implementation, compilation) is not null || SkippedRegistrationReason(module, implementation) is not null);
+		if (registration.ServiceSymbol is not { } service || (!SelfCompilesRegistration(module, implementation, service, compilation) && !hiddenMembers))
 		{
 			if (!sameCompilation
 			    && !context.Inherited
@@ -414,7 +424,7 @@ partial class AwaitenGenerator
 			return registration with { GreedyConstructor = true, };
 		}
 
-		if (CanConstruct(implementation, compilation))
+		if (CanConstruct(implementation, compilation) && !hiddenMembers)
 		{
 			return registration;
 		}
@@ -1101,7 +1111,11 @@ partial class AwaitenGenerator
 			return inheritance is not null && InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
 		}
 
-		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, } || CanConstruct(type.OriginalDefinition, compilation))
+		// The factory of a type this container can construct sets an internal [Inject] property it does not see.
+		bool hiddenMembers = name is not null
+		                     && !module.ContainingAssembly.GivesAccessTo(compilation.Assembly)
+		                     && GeneratedFactoryNamed(module, name, compilation) is not null;
+		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, } || (CanConstruct(type.OriginalDefinition, compilation) && !hiddenMembers))
 		{
 			return inheritance is not null && InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
 		}
