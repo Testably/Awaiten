@@ -93,8 +93,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Reports AWT238 at the <c>[Import]</c> of a module of another assembly whose generated members take the handle
-	///     of an internal service that another module of that assembly declares, when the imported module does not
-	///     register the service itself and the container does not import that other module, and drops the AWT101 the
+	///     of an internal service that another module of that assembly declares, when no imported module of that assembly
+	///     registers the service and the container does not import that other module, and drops the AWT101 the
 	///     missing handle registration causes, since the import is the one fix.
 	///     Returns the modules that declare a handle an imported module takes, which name those handles in diagnostics.
 	/// </summary>
@@ -122,7 +122,8 @@ partial class AwaitenGenerator
 				}
 
 				if (modules.Contains(provider, SymbolEqualityComparer.Default)
-				    || ConstructedModuleRegistrations(module, compilation, members: true).Any(registration => HiddenHandleName(registration.Service) == handle.Name))
+				    || modules.Any(registering => SymbolEqualityComparer.Default.Equals(registering.ContainingAssembly, provider.ContainingAssembly)
+				                                  && ConstructedModuleRegistrations(registering, compilation, members: true).Any(registration => HiddenHandleName(registration.Service) == handle.Name)))
 				{
 					continue;
 				}
