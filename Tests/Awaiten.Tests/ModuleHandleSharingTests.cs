@@ -41,12 +41,12 @@ public class ModuleHandleSharingTests
 	}
 
 	[Test]
-	public async Task InternalServiceOnlyALaterModuleCanBuild_IsProvidedByThatModule()
+	public async Task InternalServiceOfAModuleTheContainerDoesNotImport_IsProvidedByTheImportedModule()
 	{
 		using ProvidedStoreContainer.Root container = new();
 
 		await That(container.Resolve<IProvidedChef>().Store.GetType().Name).IsEqualTo("ProvidedStore")
-			.Because("the module first by name declares the handle, but the module that can build the store serves it");
+			.Because("the module first by name declares the handle, but the imported module that registers the store serves it");
 	}
 
 	[Test]

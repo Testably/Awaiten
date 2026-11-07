@@ -50,14 +50,7 @@ public interface IProvidedChef
 
 internal interface IProvidedStore;
 
-internal sealed class ProvidedSilo;
-
-internal sealed class UnbuildableProvidedStore : IProvidedStore
-{
-	public UnbuildableProvidedStore(ProvidedSilo silo)
-	{
-	}
-}
+internal sealed class UnimportedProvidedStore : IProvidedStore;
 
 internal sealed class ProvidedStore : IProvidedStore;
 
@@ -66,12 +59,12 @@ internal sealed class ProvidedChef(IProvidedStore store) : IProvidedChef
 	public object Store => store;
 }
 
-/// <summary>A <c>[Module]</c>, first by name, that registers the internal store with an implementation it cannot build.</summary>
+/// <summary>A <c>[Module]</c>, first by name, that registers the internal store and declares its handle, which the container does not import.</summary>
 [Module]
-[Singleton<UnbuildableProvidedStore, IProvidedStore>]
+[Singleton<UnimportedProvidedStore, IProvidedStore>]
 public static partial class CrossAssemblyProvidedAModule;
 
-/// <summary>A <c>[Module]</c> that registers the internal store with an implementation it can build.</summary>
+/// <summary>A <c>[Module]</c> that registers the internal store with an implementation of its own.</summary>
 [Module]
 [Singleton<ProvidedStore, IProvidedStore>]
 public static partial class CrossAssemblyProvidedBModule;

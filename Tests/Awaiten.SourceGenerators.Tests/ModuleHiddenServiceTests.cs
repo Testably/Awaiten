@@ -1689,5 +1689,69 @@ public class ModuleHiddenServiceTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an assembly granted InternalsVisibleTo constructs both itself, as before");
 		}
+
+		public class RegisteredByAnotherModuleToo
+		{
+			private static string Library(string aModule, string cModule) => $$"""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal interface IStore { }
+				internal sealed class Options { }
+				internal sealed class BStore : IStore { public BStore(Options options) { } }
+				internal sealed class CStore : IStore { }
+				internal sealed class Grinder : IGrinder { public Grinder(IStore store) { } }
+
+				[Module]
+				{{aModule}}
+				public static partial class AModule { }
+
+				[Module]
+				[Singleton<BStore, IStore>]
+				public static partial class BModule { }
+
+				[Module]
+				{{cModule}}
+				public static partial class CModule { }
+				""";
+
+			[Test]
+			public async Task ImplementationThatCannotBeBuilt_ReportsItsCause()
+			{
+				string library = Library("[Singleton<Grinder, IGrinder>]", "[Singleton<CStore, IStore>]");
+				GeneratorResult same = Generator.Run(library + """
+
+					[Container]
+					[Import(typeof(AModule))]
+					[Import(typeof(BModule))]
+					[Import(typeof(CModule))]
+					public static partial class MyContainer;
+					""");
+
+				await That(same.Diagnostics).Contains("*AWT101*'Lib.BStore' requires 'Lib.Options'*").AsWildcard();
+				await That(Generator.Run(library).Diagnostics).Contains("*AWT195*'Lib.BStore' is registered under the internal service 'Lib.IStore'*'Lib.Options'*").AsWildcard()
+					.Because("a container in another assembly would otherwise drop the registration silently and serve the store of the other module, which a container in the module's own assembly does not");
+			}
+
+			[Test]
+			public async Task ImplementationThatCannotBeBuiltBesideOneAnotherModuleNeeds_ReportsItsCause()
+			{
+				GeneratorResult library = Generator.Run(Library("", "[Singleton<CStore, IStore>]\n[Singleton<Grinder, IGrinder>]"));
+
+				await That(library.Diagnostics).Contains("*AWT195*'Lib.BStore'*'Lib.Options'*").AsWildcard()
+					.Because("an import of this module before the other one makes its broken registration win in the module's own assembly");
+			}
+
+			[Test]
+			public async Task ImplementationThatCannotBeBuiltUnderAServiceNoOtherModuleRegisters_ReportsNothing()
+			{
+				GeneratorResult library = Generator.Run(Library("", ""));
+
+				await That(library.Diagnostics).IsEmpty()
+					.Because("no other module takes or registers the internal service, so a container in another assembly cannot reach the registration");
+			}
+		}
 	}
 }

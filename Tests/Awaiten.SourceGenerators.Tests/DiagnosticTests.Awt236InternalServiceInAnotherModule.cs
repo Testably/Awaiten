@@ -131,6 +131,7 @@ public partial class DiagnosticTests
 				internal sealed class Silo { }
 				internal sealed class Store1 : IStore { public Store1(Silo silo) { } }
 				internal sealed class Store2 : IStore { }
+				internal sealed class Store3 : IStore { }
 				internal sealed class Chef : IChef { public Chef(IStore store) { } }
 
 				[Module]
@@ -157,14 +158,16 @@ public partial class DiagnosticTests
 					public static partial class LibContainer;
 					""");
 
-				await That(result.Diagnostics).IsEmpty()
+				await That(result.Diagnostics).DoesNotContain("*AWT236*").AsWildcard()
 					.Because("the module that registers the service and can build it shares the handle, as a container in the assembly that imports it resolves the service");
+				await That(result.Diagnostics).Contains("*AWT195*'Lib.Store1'*'Lib.Silo'*").AsWildcard()
+					.Because("a container in another assembly that imports the module would otherwise drop its registration silently");
 			}
 
 			[Test]
 			public async Task OneThatCanBuildTheService_ServesAContainerInAnotherAssembly()
 			{
-				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("Store1"), """
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("Store3"), """
 					using Awaiten;
 					using Lib;
 
@@ -177,7 +180,7 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).IsEmpty()
-					.Because("the module that can build the service provides the handle the chef's factory takes");
+					.Because("the imported module that registers the service provides the handle the chef's factory takes, which the module first by name declares");
 			}
 
 			[Test]

@@ -86,6 +86,17 @@ partial class AwaitenGenerator
 			                                    && probe.Services.ContainsKey(service)
 			                                    && !probe.NonViable.Contains(service));
 
+		/// <summary>
+		///     Whether another module of the assembly that another assembly can import registers <paramref name="service" />
+		///     too, so that a consumer may take the service from it. A registration of the service this module cannot build
+		///     would then vanish from a consuming container, which would serve the other module's implementation where a
+		///     container in the module's own assembly picks this one, so the module reports why it cannot build it.
+		/// </summary>
+		public bool RegisteredElsewhere(INamedTypeSymbol service)
+			=> Assembly.Registrations.Any(other => !SymbolEqualityComparer.Default.Equals(other.Key, Module)
+			                                       && IsExternallyAccessible(other.Key)
+			                                       && other.Value.Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service)));
+
 		/// <summary>Whether the module's assembly grants <c>InternalsVisibleTo</c>, so a failure may be left to such an assembly.</summary>
 		public bool Friends { get; }
 
@@ -534,7 +545,7 @@ partial class AwaitenGenerator
 		}
 
 		foreach (HiddenImplementation candidate in hidden.Implementations.Where(candidate => !candidate.Viable && !hidden.Friends
-		                                                                                     && candidate.HiddenServices(module, compilation).Any(hidden.NeededNonViable.Contains)))
+		                                                                                     && candidate.HiddenServices(module, compilation).Any(service => hidden.NeededNonViable.Contains(service) || hidden.RegisteredElsewhere(service))))
 		{
 			diagnostics.AddRange(candidate.Rejections.Where(rejection => !diagnostics.Contains(rejection)));
 		}
