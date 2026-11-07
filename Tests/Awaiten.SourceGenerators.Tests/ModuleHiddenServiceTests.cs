@@ -365,6 +365,53 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
+		public async Task CaptiveDependency_NamesTheInternalService()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal sealed class BeanStore { }
+				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+				[Module]
+				[Scoped<BeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+				""", Container);
+
+			await That(result.Diagnostics).Contains("*AWT105*'Lib.BeanStore (internal to module Lib.CoffeeModule)'*").AsWildcard()
+				.Because("the lifetime checks work through the handle and name the internal service instead of the generated type");
+			await That(result.Diagnostics).DoesNotContain("*Hidden_*").AsWildcard();
+		}
+
+		[Test]
+		public async Task MissingDependency_NamesTheInternalService()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IClock { }
+				public interface IGrinder { }
+				internal sealed class BeanStore { public BeanStore(IClock clock) { } }
+				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+				""", Container);
+
+			await That(result.Diagnostics).Contains("*AWT101*'Lib.BeanStore (internal to module Lib.CoffeeModule)'*Lib.IClock*").AsWildcard()
+				.Because("the container resolves the internal service's dependencies from its own graph and names the service when one is missing");
+			await That(result.Diagnostics).DoesNotContain("*Hidden_*").AsWildcard();
+		}
+
+		[Test]
 		public async Task TwoModulesRegisteringOneInternalImplementation_KeepTheirHandlesApart()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""

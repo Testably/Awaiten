@@ -1,4 +1,5 @@
 using Awaiten.SourceGenerators.Entities;
+using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
 
 namespace Awaiten.SourceGenerators;
@@ -18,6 +19,68 @@ partial class AwaitenGenerator
 	///     <c>DisplayInstance</c> trims from diagnostics.
 	/// </summary>
 	private const string HiddenKeyMarker = "@hidden:";
+
+	/// <summary>
+	///     Rewrites each diagnostic argument that names a generated handle of an imported module of another assembly to the
+	///     internal service it holds, as <c>Lib.BeanStore (internal to module Lib.CoffeeModule)</c>, which the message
+	///     quotes like any other type, so a message never names a type the user did not write. A handle inside a longer
+	///     argument, such as a type argument, is named by the service alone.
+	/// </summary>
+	private static void NameHiddenServices(INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		if (diagnostics.Count == 0)
+		{
+			return;
+		}
+
+		IEnumerable<INamedTypeSymbol> modules = CollectImportedModules(container, new List<DiagnosticInfo>()).Select(module => module.Symbol);
+		if (ReadExtends(container) is { } baseContainer)
+		{
+			modules = modules.Concat(CollectImportedModules(baseContainer, new List<DiagnosticInfo>()).Select(module => module.Symbol));
+		}
+
+		Dictionary<string, (string Service, string Module)> handles = new(StringComparer.Ordinal);
+		foreach (INamedTypeSymbol module in modules.Where(module => !SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)))
+		{
+			string moduleName = Display(module.ToDisplayString(FullyQualified));
+			foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation))
+			{
+				foreach (INamedTypeSymbol type in new[] { registration.Service, registration.Implementation, })
+				{
+					handles[$"{moduleName}.{InternalsClass}.{HiddenHandleName(type)}"] = (Display(type.ToDisplayString(FullyQualified)), moduleName);
+				}
+			}
+		}
+
+		if (handles.Count == 0)
+		{
+			return;
+		}
+
+		for (int index = 0; index < diagnostics.Count; index++)
+		{
+			DiagnosticInfo diagnostic = diagnostics[index];
+			string[] arguments = diagnostic.MessageArgs.AsArray();
+			string[] renamed = arguments.Select(Rename).ToArray();
+			if (!renamed.SequenceEqual(arguments))
+			{
+				diagnostics[index] = diagnostic with { MessageArgs = new EquatableArray<string>(renamed), };
+			}
+		}
+
+		string Rename(string argument)
+		{
+			foreach (KeyValuePair<string, (string Service, string Module)> handle in handles.Where(handle => argument.Contains(handle.Key)))
+			{
+				string named = $"{handle.Value.Service} (internal to module {handle.Value.Module})";
+				argument = argument == handle.Key
+					? named
+					: argument.Replace($"'{handle.Key}'", $"'{named}'").Replace(handle.Key, handle.Value.Service);
+			}
+
+			return argument;
+		}
+	}
 
 	/// <summary>
 	///     Rewrites a registration read off a module of another assembly whose implementation the module builds through
