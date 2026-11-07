@@ -61,14 +61,14 @@ Cup cup = shop.Resolve<Cup>();
 
 ## Documentation
 
-Full documentation lives at [awaiten-dev.github.io/Awaiten](https://awaiten-dev.github.io/Awaiten).
+Full documentation lives at [awaiten.dev](https://awaiten.dev).
 
-- [Getting started](https://awaiten-dev.github.io/Awaiten/docs/getting-started)
-- [Complete example](https://awaiten-dev.github.io/Awaiten/docs/complete-example)
-- Core concepts: [lifetimes](https://awaiten-dev.github.io/Awaiten/docs/core-concepts/lifetimes), [scopes](https://awaiten-dev.github.io/Awaiten/docs/core-concepts/scopes), [async initialization](https://awaiten-dev.github.io/Awaiten/docs/core-concepts/async-initialization), [disposal](https://awaiten-dev.github.io/Awaiten/docs/core-concepts/disposal)
-- Registration: [factories and instances](https://awaiten-dev.github.io/Awaiten/docs/registration/factories-and-instances), [decorators](https://awaiten-dev.github.io/Awaiten/docs/registration/decorators), [composites](https://awaiten-dev.github.io/Awaiten/docs/registration/composites), [keyed services](https://awaiten-dev.github.io/Awaiten/docs/registration/keyed-services), [open generics](https://awaiten-dev.github.io/Awaiten/docs/registration/open-generics), [scanning](https://awaiten-dev.github.io/Awaiten/docs/registration/scanning), [modules](https://awaiten-dev.github.io/Awaiten/docs/registration/modules)
-- Resolution: [resolving services](https://awaiten-dev.github.io/Awaiten/docs/resolution/resolving-services), [relationships](https://awaiten-dev.github.io/Awaiten/docs/resolution/relationships), [collections](https://awaiten-dev.github.io/Awaiten/docs/resolution/collections), [keyed dictionaries](https://awaiten-dev.github.io/Awaiten/docs/resolution/keyed-dictionaries), [property injection](https://awaiten-dev.github.io/Awaiten/docs/resolution/property-injection), [runtime arguments](https://awaiten-dev.github.io/Awaiten/docs/resolution/runtime-arguments), [context-aware factories](https://awaiten-dev.github.io/Awaiten/docs/resolution/context-aware-factories), [generic variance](https://awaiten-dev.github.io/Awaiten/docs/resolution/generic-variance)
-- Ownership and lifecycle: [owned](https://awaiten-dev.github.io/Awaiten/docs/lifetime/owned), [lifetime safety](https://awaiten-dev.github.io/Awaiten/docs/lifetime/lifetime-safety), [lifecycle hooks](https://awaiten-dev.github.io/Awaiten/docs/lifetime/lifecycle-hooks)
-- Hosting: [MS.DI bridge](https://awaiten-dev.github.io/Awaiten/docs/hosting/msdi-bridge), [external services](https://awaiten-dev.github.io/Awaiten/docs/hosting/external-services)
-- [Design principles & the composition root](https://awaiten-dev.github.io/Awaiten/docs/design-principles)
-- [Diagnostics](https://awaiten-dev.github.io/Awaiten/docs/diagnostics)
+- [Getting started](https://awaiten.dev/docs/getting-started)
+- [Complete example](https://awaiten.dev/docs/complete-example)
+- Core concepts: [lifetimes](https://awaiten.dev/docs/core-concepts/lifetimes), [scopes](https://awaiten.dev/docs/core-concepts/scopes), [async initialization](https://awaiten.dev/docs/core-concepts/async-initialization), [disposal](https://awaiten.dev/docs/core-concepts/disposal)
+- Registration: [factories and instances](https://awaiten.dev/docs/registration/factories-and-instances), [decorators](https://awaiten.dev/docs/registration/decorators), [composites](https://awaiten.dev/docs/registration/composites), [keyed services](https://awaiten.dev/docs/registration/keyed-services), [open generics](https://awaiten.dev/docs/registration/open-generics), [scanning](https://awaiten.dev/docs/registration/scanning), [modules](https://awaiten.dev/docs/registration/modules)
+- Resolution: [resolving services](https://awaiten.dev/docs/resolution/resolving-services), [relationships](https://awaiten.dev/docs/resolution/relationships), [collections](https://awaiten.dev/docs/resolution/collections), [keyed dictionaries](https://awaiten.dev/docs/resolution/keyed-dictionaries), [property injection](https://awaiten.dev/docs/resolution/property-injection), [runtime arguments](https://awaiten.dev/docs/resolution/runtime-arguments), [context-aware factories](https://awaiten.dev/docs/resolution/context-aware-factories), [generic variance](https://awaiten.dev/docs/resolution/generic-variance)
+- Ownership and lifecycle: [owned](https://awaiten.dev/docs/lifetime/owned), [lifetime safety](https://awaiten.dev/docs/lifetime/lifetime-safety), [lifecycle hooks](https://awaiten.dev/docs/lifetime/lifecycle-hooks)
+- Hosting: [MS.DI bridge](https://awaiten.dev/docs/hosting/msdi-bridge), [external services](https://awaiten.dev/docs/hosting/external-services)
+- [Design principles & the composition root](https://awaiten.dev/docs/design-principles)
+- [Diagnostics](https://awaiten.dev/docs/diagnostics)
