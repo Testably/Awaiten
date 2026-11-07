@@ -1218,6 +1218,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:56:18 2026 \u002B0100",
         "message": "fix: self-compile only the module registrations the generated factory supports (#282)"
+      },
+      {
+        "sha": "1f5824137769477dd31705fd760887a3a23a08cc",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
+        "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
       }
     ],
     "labels": [
@@ -1423,7 +1429,8 @@ window.BENCHMARK_DATA = {
       "4aaa3ebf",
       "25c12b4f",
       "e3f54e32",
-      "0d542565"
+      "0d542565",
+      "1f582413"
     ],
     "datasets": [
       {
@@ -1632,7 +1639,8 @@ window.BENCHMARK_DATA = {
           7.769033941839423,
           7.60893460895334,
           5.442413080483675,
-          7.754577210793893
+          7.754577210793893,
+          9.328384884198506
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1644,6 +1652,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2063,7 +2072,8 @@ window.BENCHMARK_DATA = {
           7.76448251839195,
           7.504670562346776,
           6.684987880862677,
-          8.610362975725106
+          8.610362975725106,
+          6.884327889553139
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2075,6 +2085,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2494,7 +2505,8 @@ window.BENCHMARK_DATA = {
           119.30468052228292,
           116.95757095019023,
           96.40774822235107,
-          118.41469117800395
+          118.41469117800395,
+          140.5269817193349
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2506,6 +2518,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2921,7 +2934,8 @@ window.BENCHMARK_DATA = {
           9.75702491402626,
           9.831362144305157,
           6.5507001007596655,
-          9.726211112279158
+          9.726211112279158,
+          10.293473132451375
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2933,6 +2947,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3344,7 +3359,8 @@ window.BENCHMARK_DATA = {
           10.67872095214469,
           11.170236507287392,
           8.367060718933741,
-          11.018385034054518
+          11.018385034054518,
+          12.220266785224279
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3356,6 +3372,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4786,6 +4803,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:56:18 2026 \u002B0100",
         "message": "fix: self-compile only the module registrations the generated factory supports (#282)"
+      },
+      {
+        "sha": "1f5824137769477dd31705fd760887a3a23a08cc",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
+        "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
       }
     ],
     "labels": [
@@ -4991,7 +5014,8 @@ window.BENCHMARK_DATA = {
       "4aaa3ebf",
       "25c12b4f",
       "e3f54e32",
-      "0d542565"
+      "0d542565",
+      "1f582413"
     ],
     "datasets": [
       {
@@ -5200,7 +5224,8 @@ window.BENCHMARK_DATA = {
           8.492885713775953,
           8.723820370435714,
           6.071785822510719,
-          8.460138532977838
+          8.460138532977838,
+          10.140788753827414
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5212,6 +5237,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5631,7 +5657,8 @@ window.BENCHMARK_DATA = {
           7.667722655194146,
           7.444825304547946,
           6.529049445192019,
-          7.301970677716391
+          7.301970677716391,
+          6.884511306881905
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5643,6 +5670,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6062,7 +6090,8 @@ window.BENCHMARK_DATA = {
           124.70340830939156,
           109.60562057495117,
           96.71319056408745,
-          133.15486079851786
+          133.15486079851786,
+          145.9845119714737
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6074,6 +6103,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6489,7 +6519,8 @@ window.BENCHMARK_DATA = {
           9.71657551129659,
           9.80580143057383,
           6.54388976842165,
-          9.713619984113253
+          9.713619984113253,
+          10.210193548064966
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6501,6 +6532,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6912,7 +6944,8 @@ window.BENCHMARK_DATA = {
           14.120663680632909,
           14.516431087007126,
           8.489655514558157,
-          14.64030282731567
+          14.64030282731567,
+          16.35344121058782
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6924,6 +6957,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8354,6 +8388,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:56:18 2026 \u002B0100",
         "message": "fix: self-compile only the module registrations the generated factory supports (#282)"
+      },
+      {
+        "sha": "1f5824137769477dd31705fd760887a3a23a08cc",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
+        "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
       }
     ],
     "labels": [
@@ -8559,7 +8599,8 @@ window.BENCHMARK_DATA = {
       "4aaa3ebf",
       "25c12b4f",
       "e3f54e32",
-      "0d542565"
+      "0d542565",
+      "1f582413"
     ],
     "datasets": [
       {
@@ -8768,7 +8809,8 @@ window.BENCHMARK_DATA = {
           27.589746057987213,
           16.531011655926704,
           21.84052317738533,
-          15.630354762077332
+          15.630354762077332,
+          10.732851804296176
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8930,6 +8972,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9199,7 +9242,8 @@ window.BENCHMARK_DATA = {
           1852.339037068685,
           1139.6790691103254,
           1494.0794151306152,
-          1174.3671323140463
+          1174.3671323140463,
+          720.3112782069614
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9211,6 +9255,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9630,7 +9675,8 @@ window.BENCHMARK_DATA = {
           25382.609189860024,
           25562.579516601563,
           30042.996541341145,
-          25368.809422084265
+          25368.809422084265,
+          17231.84678548177
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9844,6 +9890,7 @@ window.BENCHMARK_DATA = {
           32476,
           32478,
           32482,
+          32478,
           32478
         ],
         "borderColor": "#5E2750",
@@ -10057,7 +10104,8 @@ window.BENCHMARK_DATA = {
           719.3910491943359,
           565.583544031779,
           714.5200277056013,
-          599.1916379928589
+          599.1916379928589,
+          381.6618014403752
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10087,6 +10135,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10480,7 +10529,8 @@ window.BENCHMARK_DATA = {
           13451.928114754814,
           8728.227014814105,
           11794.975818634033,
-          9127.567311604818
+          9127.567311604818,
+          6167.829593658447
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10690,7 +10740,8 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
-          24760
+          24760,
+          24761
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11922,6 +11973,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:56:18 2026 \u002B0100",
         "message": "fix: self-compile only the module registrations the generated factory supports (#282)"
+      },
+      {
+        "sha": "1f5824137769477dd31705fd760887a3a23a08cc",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
+        "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
       }
     ],
     "labels": [
@@ -12127,7 +12184,8 @@ window.BENCHMARK_DATA = {
       "4aaa3ebf",
       "25c12b4f",
       "e3f54e32",
-      "0d542565"
+      "0d542565",
+      "1f582413"
     ],
     "datasets": [
       {
@@ -12336,7 +12394,8 @@ window.BENCHMARK_DATA = {
           331.91127087275186,
           109.22288527659008,
           192.00864906311034,
-          111.1582202230181
+          111.1582202230181,
+          73.0721077521642
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12498,6 +12557,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12767,7 +12827,8 @@ window.BENCHMARK_DATA = {
           16077.633976236979,
           10365.120604451497,
           15496.840397135416,
-          10662.155179341635
+          10662.155179341635,
+          7103.10112116887
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12779,6 +12840,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13198,7 +13260,8 @@ window.BENCHMARK_DATA = {
           611270.2755998884,
           621552.8912527902,
           742562.5684344952,
-          633059.9933733259
+          633059.9933733259,
+          415945.89020647324
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13412,7 +13475,8 @@ window.BENCHMARK_DATA = {
           738499,
           740059,
           740450,
-          740319
+          740319,
+          720386
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13625,7 +13689,8 @@ window.BENCHMARK_DATA = {
           44218.84289550781,
           34854.955467811,
           44771.6337483724,
-          35957.258579799105
+          35957.258579799105,
+          22425.831917317708
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13835,7 +13900,8 @@ window.BENCHMARK_DATA = {
           80270,
           80009,
           80009,
-          80001
+          80001,
+          80305
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14048,7 +14114,8 @@ window.BENCHMARK_DATA = {
           377826.5760216346,
           265795.9797363281,
           355901.13414588344,
-          280722.10408528644
+          280722.10408528644,
+          185029.9194173177
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14258,7 +14325,8 @@ window.BENCHMARK_DATA = {
           572327,
           573059,
           573203,
-          573074
+          573074,
+          573040
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15466,6 +15534,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 07:56:18 2026 \u002B0100",
         "message": "fix: self-compile only the module registrations the generated factory supports (#282)"
+      },
+      {
+        "sha": "1f5824137769477dd31705fd760887a3a23a08cc",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:57:06 2026 \u002B0100",
+        "message": "feat: build a base container\u0027s private implementations for an extending container (#283)"
       }
     ],
     "labels": [
@@ -15667,7 +15741,8 @@ window.BENCHMARK_DATA = {
       "4aaa3ebf",
       "25c12b4f",
       "e3f54e32",
-      "0d542565"
+      "0d542565",
+      "1f582413"
     ],
     "datasets": [
       {
@@ -15872,7 +15947,8 @@ window.BENCHMARK_DATA = {
           268.7132699966431,
           244.31128461020333,
           251.27400483403886,
-          286.62438780466715
+          286.62438780466715,
+          301.53457052367077
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -15907,6 +15983,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16295,7 +16372,8 @@ window.BENCHMARK_DATA = {
           614.6337416966757,
           602.7085116068522,
           572.7826052445632,
-          616.8113985061646
+          616.8113985061646,
+          684.7794905390058
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16307,6 +16385,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -16718,7 +16797,8 @@ window.BENCHMARK_DATA = {
           4762.533066558838,
           6551.773107256208,
           6526.4305828639435,
-          7015.630447896322
+          7015.630447896322,
+          5319.679785664876
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -16802,6 +16882,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -17141,7 +17222,8 @@ window.BENCHMARK_DATA = {
           394.7113081773122,
           385.44796439579557,
           391.37754821777344,
-          411.61658833821616
+          411.61658833821616,
+          435.426789410909
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -17153,6 +17235,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -17564,7 +17647,8 @@ window.BENCHMARK_DATA = {
           697.0866574605305,
           714.054590733846,
           735.8377890904744,
-          751.8731012980144
+          751.8731012980144,
+          771.1621587753295
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17576,6 +17660,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
